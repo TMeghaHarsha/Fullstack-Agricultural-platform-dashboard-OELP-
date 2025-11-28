@@ -1,0 +1,6 @@
+# Add before the migrate step:
+- name: Fake problematic migration
+  run: python oelp_backend/manage.py migrate models_app 0008_add_metadata_to_notification --fake || true
+
+- name: Run migrations
+  run: python oelp_backend/manage.py migrate

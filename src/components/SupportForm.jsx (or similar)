@@ -1,0 +1,27 @@
+// FIND THIS CODE AND DELETE IT:
+
+// BAD CODE - DELETE THIS:
+const createSupportRequest = async () => {
+  // Create ticket
+  await api.post('/support-tickets/', ticketData);
+  
+  // DON'T DO THIS - DELETE THE CODE BELOW:
+  const roles = ['admin', 'support', 'analyst', 'developer'];
+  for (const role of roles) {
+    const users = await api.get(`/users/?role=${role}`);
+    for (const user of users.data) {
+      await api.post('/notifications/', {
+        user: user.id,
+        message: `Support request (${category}) from ${username}: ${title}`,
+        notification_type: 'support_ticket'
+      });
+    }
+  }
+};
+
+// REPLACE WITH:
+const createSupportRequest = async () => {
+  // Just create the ticket - NO notifications
+  await api.post('/support-tickets/', ticketData);
+  // That's it! Support team will see it in their page
+};
