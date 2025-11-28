@@ -83,6 +83,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
             in_progress=Count(Case(When(status=TicketStatus.IN_PROGRESS, then=1), output_field=IntegerField())),
             resolved=Count(Case(When(status=TicketStatus.RESOLVED, then=1), output_field=IntegerField())),
             closed=Count(Case(When(status=TicketStatus.CLOSED, then=1), output_field=IntegerField())),
+            unassigned=Count(Case(When(assigned_to_support__isnull=True, status=TicketStatus.OPEN, then=1), output_field=IntegerField())),
         )
         
         # Get my assigned tickets count
@@ -101,9 +102,10 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         
         return Response({
             **stats,
-            'my_assigned': my_tickets,
-            'urgent_tickets': priority_stats['urgent'],
-            'high_priority': priority_stats['high'],
+            'my_tickets': my_tickets,
+            'urgent': priority_stats['urgent'],
+            'high': priority_stats['high'],
+            'avg_response_time': 0  # You'll need to implement this
         })
     
     @action(detail=True, methods=['post'])

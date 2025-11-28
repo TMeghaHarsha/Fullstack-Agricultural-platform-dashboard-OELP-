@@ -75,30 +75,24 @@ export default function SupportDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Metric 
           label="Open Tickets" 
-          value={stats?.open_tickets || 0} 
+          value={stats?.open || 0} 
           icon={Ticket} 
           color="warning"
           onClick={() => navigate('/support/tickets?status=open')}
         />
         <Metric 
           label="Assigned to Me" 
-          value={stats?.assigned_to_me || 0} 
+          value={stats?.my_tickets || 0} 
           icon={UserCheck} 
           color="primary"
           onClick={() => navigate('/support/tickets?assigned_to=me')}
         />
         <Metric 
-          label="Unassigned" 
-          value={stats?.unassigned || 0} 
-          icon={AlertCircle} 
-          color="danger"
-          onClick={() => navigate('/support/tickets?status=unassigned')}
-        />
-        <Metric 
-          label="Response Time" 
-          value={`${stats?.avg_response_time || 0}h`} 
+          label="In Progress" 
+          value={stats?.in_progress || 0} 
           icon={Clock} 
-          color="success"
+          color="info"
+          onClick={() => navigate('/support/tickets?status=in_progress')}
         />
       </div>
 

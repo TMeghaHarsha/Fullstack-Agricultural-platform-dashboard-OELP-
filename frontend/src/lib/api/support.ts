@@ -18,12 +18,18 @@ export async function fetchSupportStats() {
       'Authorization': `Bearer ${localStorage.getItem('access')}`,
     },
   });
-  return handleResponse<{
-    open_tickets: number;
-    assigned_to_me: number;
-    unassigned: number;
-    avg_response_time: number;
-  }>(response);
+  const data = await handleResponse<any>(response);
+  
+  // Transform the backend response to match frontend expectations
+  return {
+    open_tickets: data.open || 0,
+    assigned_to_me: data.my_tickets || 0,
+    unassigned: data.unassigned || 0,
+    avg_response_time: data.avg_response_time || 0,
+    in_progress: data.in_progress || 0,
+    urgent: data.urgent || 0,
+    high: data.high || 0
+  };
 }
 
 // Fetch tickets with optional filters
@@ -107,9 +113,7 @@ export async function assignTicket(ticketId: string | number, userId: number) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${localStorage.getItem('access')}`,
     },
-    body: JSON.stringify({
-      assigned_to: userId,
-    }),
+    body: JSON.stringify({ assigned_to: userId }),
   });
   return handleResponse<Ticket>(response);
 }
@@ -120,7 +124,7 @@ export async function addTicketComment(
   comment: string,
   isInternal = false
 ) {
-  const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/add_comment/`, {
+  const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/comments/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -142,34 +146,32 @@ export async function forwardTicketToRole(ticketId: string | number, role: strin
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${localStorage.getItem('access')}`,
     },
-    body: JSON.stringify({
-      role,
-    }),
+    body: JSON.stringify({ role }),
   });
   return handleResponse<Ticket>(response);
 }
 
 // Fetch support users
 export async function fetchSupportUsers() {
-  const response = await fetch('/api/users/?role=support', {
+  const response = await fetch(`${API_BASE_URL}/users/support/`, {
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('access')}`,
     },
   });
-  return handleResponse<{ results: Array<{ id: number; first_name: string; last_name: string; email: string }> }>(response);
+  return handleResponse<Array<{ id: number; name: string; email: string }>>(response);
 }
 
 // Mark ticket as resolved
 export async function resolveTicket(ticketId: string | number, resolutionNotes: string) {
-  return updateTicketStatus(ticketId, 'resolved', resolutionNotes);
+  return updateTicketStatus(ticketId, TicketStatus.RESOLVED, resolutionNotes);
 }
 
 // Close a ticket
 export async function closeTicket(ticketId: string | number) {
-  return updateTicketStatus(ticketId, 'closed');
+  return updateTicketStatus(ticketId, TicketStatus.CLOSED);
 }
 
 // Reopen a ticket
 export async function reopenTicket(ticketId: string | number) {
-  return updateTicketStatus(ticketId, 'open');
+  return updateTicketStatus(ticketId, TicketStatus.OPEN);
 }
