@@ -57,6 +57,7 @@ import { DeveloperLayout } from "./developer/components/layout/DeveloperLayout";
 import DeveloperDashboard from "./developer/pages/DeveloperDashboard";
 import DeveloperUpdates from "./developer/pages/DeveloperUpdates";
 import DeveloperNotifications from "./developer/pages/DeveloperNotifications";
+import IssuesPage from "./shared/components/IssuesPage";
 
 const queryClient = new QueryClient();
 
@@ -333,6 +334,7 @@ const App = () => (
           <Route path="/admin/notifications" element={<RequireAdmin><AdminLayout><AdminNotifications /></AdminLayout></RequireAdmin>} />
           <Route path="/admin/settings" element={<RequireAdmin><AdminLayout><AdminSettings /></AdminLayout></RequireAdmin>} />
           <Route path="/admin/crops" element={<RequireAdmin><AdminLayout><AdminCrops /></AdminLayout></RequireAdmin>} />
+          <Route path="/admin/issues" element={<RequireAdmin><AdminLayout><IssuesPage /></AdminLayout></RequireAdmin>} />
           
           {/* Agronomist routes */}
           <Route path="/agronomist" element={<Navigate to="/agronomist/dashboard" replace />} />
@@ -341,6 +343,7 @@ const App = () => (
           <Route path="/agronomist/notifications" element={<RequireAgronomist><AgronomistLayout><AgronomistNotifications /></AgronomistLayout></RequireAgronomist>} />
           <Route path="/agronomist/users" element={<RequireAgronomist><AgronomistLayout><AgronomistUsers /></AgronomistLayout></RequireAgronomist>} />
           <Route path="/agronomist/settings" element={<RequireAgronomist><AgronomistLayout><Settings /></AgronomistLayout></RequireAgronomist>} />
+          <Route path="/agronomist/issues" element={<RequireAgronomist><AgronomistLayout><IssuesPage /></AgronomistLayout></RequireAgronomist>} />
           {/* Support routes */}
           <Route path="/support" element={<Navigate to="/support/dashboard" replace />} />
           <Route path="/support/dashboard" element={<RequireSupport><SupportLayout><SupportDashboard /></SupportLayout></RequireSupport>} />
@@ -353,6 +356,7 @@ const App = () => (
           <Route path="/analyst/reports" element={<RequireAnalyst><AnalystLayout><AnalystReports /></AnalystLayout></RequireAnalyst>} />
           <Route path="/analyst/notifications" element={<RequireAnalyst><AnalystLayout><AnalystNotifications /></AnalystLayout></RequireAnalyst>} />
           <Route path="/analyst/settings" element={<RequireAnalyst><AnalystLayout><Settings /></AnalystLayout></RequireAnalyst>} />
+          <Route path="/analyst/issues" element={<RequireAnalyst><AnalystLayout><IssuesPage /></AnalystLayout></RequireAnalyst>} />
           {/* Business routes */}
           <Route path="/business" element={<Navigate to="/business/dashboard" replace />} />
           <Route path="/business/dashboard" element={<RequireBusiness><BusinessLayout><BusinessDashboard /></BusinessLayout></RequireBusiness>} />
@@ -360,12 +364,14 @@ const App = () => (
           <Route path="/business/payments" element={<RequireBusiness><BusinessLayout><BusinessPayments /></BusinessLayout></RequireBusiness>} />
           <Route path="/business/notifications" element={<RequireBusiness><BusinessLayout><BusinessNotifications /></BusinessLayout></RequireBusiness>} />
           <Route path="/business/settings" element={<RequireBusiness><BusinessLayout><Settings /></BusinessLayout></RequireBusiness>} />
+          <Route path="/business/issues" element={<RequireBusiness><BusinessLayout><IssuesPage /></BusinessLayout></RequireBusiness>} />
           {/* Developer routes */}
           <Route path="/developer" element={<Navigate to="/developer/dashboard" replace />} />
           <Route path="/developer/dashboard" element={<RequireDeveloper><DeveloperLayout><DeveloperDashboard /></DeveloperLayout></RequireDeveloper>} />
           <Route path="/developer/updates" element={<RequireDeveloper><DeveloperLayout><DeveloperUpdates /></DeveloperLayout></RequireDeveloper>} />
           <Route path="/developer/notifications" element={<RequireDeveloper><DeveloperLayout><DeveloperNotifications /></DeveloperLayout></RequireDeveloper>} />
           <Route path="/developer/settings" element={<RequireDeveloper><DeveloperLayout><Settings /></DeveloperLayout></RequireDeveloper>} />
+          <Route path="/developer/issues" element={<RequireDeveloper><DeveloperLayout><IssuesPage /></DeveloperLayout></RequireDeveloper>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

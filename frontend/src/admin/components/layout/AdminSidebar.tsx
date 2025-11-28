@@ -6,7 +6,8 @@ import {
   BarChart3, 
   Users, 
   Settings,
-  ChevronRight
+  ChevronRight,
+  AlertCircle
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -30,6 +31,7 @@ const navItems = [
   { title: "Notifications", url: "/admin/notifications", icon: Bell },
   { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
   { title: "Users", url: "/admin/users", icon: Users },
+  { title: "Issues", url: "/admin/issues", icon: AlertCircle },
   { title: "Settings", url: "/admin/settings", icon: Settings },
 ];
 

@@ -1,4 +1,4 @@
-import { LayoutDashboard, GitMerge, Bell, Settings, Wrench, ChevronRight } from "lucide-react";
+import { LayoutDashboard, GitMerge, Bell, Settings, Wrench, ChevronRight, AlertCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
@@ -7,6 +7,7 @@ const navItems = [
   { title: "Dashboard", url: "/developer/dashboard", icon: LayoutDashboard },
   { title: "Updates", url: "/developer/updates", icon: GitMerge },
   { title: "Notifications", url: "/developer/notifications", icon: Bell },
+  { title: "Issues", url: "/developer/issues", icon: AlertCircle },
   { title: "Settings", url: "/developer/settings", icon: Settings },
 ];
 

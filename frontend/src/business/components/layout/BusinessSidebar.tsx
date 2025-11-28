@@ -1,4 +1,4 @@
-import { LayoutDashboard, CreditCard, Wallet, Bell, Settings, Sprout, ChevronRight } from "lucide-react";
+import { LayoutDashboard, CreditCard, Wallet, Bell, Settings, Sprout, ChevronRight, AlertCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
@@ -8,6 +8,7 @@ const navItems = [
   { title: "Subscriptions", url: "/business/subscriptions", icon: CreditCard },
   { title: "Payments", url: "/business/payments", icon: Wallet },
   { title: "Notifications", url: "/business/notifications", icon: Bell },
+  { title: "Issues", url: "/business/issues", icon: AlertCircle },
   { title: "Settings", url: "/business/settings", icon: Settings },
 ];
 

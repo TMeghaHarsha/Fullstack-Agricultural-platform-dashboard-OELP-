@@ -1977,7 +1977,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         return SupportTicketSerializer
 
     def perform_create(self, serializer):
-        """End user creates a ticket"""
+        """End user creates a ticket - NO NOTIFICATIONS, tickets appear in support dashboard"""
         ticket = serializer.save()
         
         # Create history entry
@@ -1988,18 +1988,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
             description=f"Ticket created by {self.request.user.full_name}"
         )
         
-        # Create notification for support team
-        support_users = CustomUser.objects.filter(
-            user_roles__role__name="Support",
-            is_active=True
-        )
-        
-        for support_user in support_users:
-            Notification.objects.create(
-                sender=self.request.user,
-                receiver=support_user,
-                message=f"New support ticket #{ticket.ticket_number}: {ticket.title}"
-            )
+        # NO NOTIFICATIONS - Support team will see tickets in their dedicated dashboard
 
     @action(detail=True, methods=["post"], url_path="assign-support")
     def assign_support(self, request, pk=None):
@@ -2056,7 +2045,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         target_role = request.data.get("role")  # admin, agronomist, analyst, developer, business
         user_id = request.data.get("user_id", None)  # Optional specific user
         
-        valid_roles = ["Admin", "Agronomist", "Analyst", "Development", "Business"]
+        valid_roles = ["Admin", "Agronomist", "Analyst", "Developer", "Business"]
         
         if not target_role or target_role not in valid_roles:
             return Response(
@@ -2095,27 +2084,13 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
             new_value=target_role
         )
         
-        # Notify all users with that role or specific user
-        if ticket.forwarded_to_user:
-            recipients = [ticket.forwarded_to_user]
-        else:
-            recipients = CustomUser.objects.filter(
-                user_roles__role__name=target_role,
-                is_active=True
-            )
-        
-        for recipient in recipients:
-            Notification.objects.create(
-                sender=request.user,
-                receiver=recipient,
-                message=f"Ticket #{ticket.ticket_number} forwarded to {target_role} team"
-            )
+        # NO NOTIFICATIONS - Tickets will appear in the role's Issues page
         
         return Response({"detail": f"Ticket forwarded to {target_role}"})
 
     @action(detail=True, methods=["post"], url_path="resolve")
     def resolve_ticket(self, request, pk=None):
-        """Mark ticket as resolved by assigned role"""
+        """Mark ticket as resolved by assigned role - sends back to support for review"""
         ticket = self.get_object()
         resolution_notes = request.data.get("resolution_notes", "")
         
@@ -2125,39 +2100,23 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         ticket.resolved_by = request.user
         ticket.resolved_at = timezone.now()
         ticket.resolution_notes = resolution_notes
-        ticket.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_notes", "updated_at"])
+        # Clear forwarded fields so it goes back to support
+        ticket.forwarded_to_role = None
+        ticket.forwarded_to_user = None
+        ticket.save(update_fields=["status", "resolved_by", "resolved_at", "resolution_notes", "forwarded_to_role", "forwarded_to_user", "updated_at"])
         
         # Create history
         TicketHistory.objects.create(
             ticket=ticket,
             user=request.user,
             action="resolved",
-            description=f"Ticket resolved by {request.user.full_name}",
+            description=f"Ticket resolved by {request.user.full_name}. Sent back to support for review.",
             new_value=resolution_notes[:200]  # Store first 200 chars
         )
         
-        # Notify support team
-        support_users = CustomUser.objects.filter(
-            user_roles__role__name="Support",
-            is_active=True
-        )
+        # NO NOTIFICATIONS - Support will see resolved tickets in their dashboard
         
-        for support_user in support_users:
-            Notification.objects.create(
-                sender=request.user,
-                receiver=support_user,
-                message=f"Ticket #{ticket.ticket_number} has been resolved"
-            )
-        
-        # Notify ticket creator
-        if ticket.created_by != request.user:
-            Notification.objects.create(
-                sender=request.user,
-                receiver=ticket.created_by,
-                message=f"Your ticket #{ticket.ticket_number} has been resolved"
-            )
-        
-        return Response({"detail": "Ticket marked as resolved"})
+        return Response({"detail": "Ticket marked as resolved and sent to support for review"})
 
     @action(detail=True, methods=["post"], url_path="close")
     def close_ticket(self, request, pk=None):
@@ -2246,7 +2205,7 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         user_roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
         
         # Base queryset based on role
-        if "Support" in user_roles or "Admin" in user_roles:
+        if "Support" in user_roles or "Admin" in user_roles or "SuperAdmin" in user_roles:
             queryset = SupportTicket.objects.all()
         else:
             queryset = SupportTicket.objects.filter(
@@ -2262,6 +2221,88 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(tickets, many=True)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=["get"], url_path="forwarded-to-me")
+    def forwarded_to_me(self, request):
+        """Get tickets forwarded to current user's role (for Issues pages)"""
+        user = request.user
+        user_roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
+        
+        # Get tickets forwarded to user's role or specifically to user
+        tickets = SupportTicket.objects.filter(
+            Q(forwarded_to_role__in=user_roles) | Q(forwarded_to_user=user),
+            status__in=["in_progress", "assigned"]  # Only active forwarded tickets
+        ).select_related(
+            "created_by", "assigned_to_support", "forwarded_to_user", "resolved_by"
+        ).prefetch_related("comments", "history").order_by("-created_at")
+        
+        serializer = self.get_serializer(tickets, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=["post"], url_path="notify-user")
+    def notify_user(self, request, pk=None):
+        """Support notifies user after ticket resolution"""
+        ticket = self.get_object()
+        user_roles = list(request.user.user_roles.select_related("role").values_list("role__name", flat=True))
+        
+        # Only support/admin can notify users
+        if "Support" not in user_roles and "Admin" not in user_roles and "SuperAdmin" not in user_roles:
+            return Response(
+                {"error": "Only support team can notify users"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if ticket.status != "resolved":
+            return Response(
+                {"error": "Ticket must be resolved before notifying user"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        message = request.data.get("message", f"Your ticket #{ticket.ticket_number} has been resolved. {ticket.resolution_notes or ''}")
+        
+        # Notify ticket creator
+        Notification.objects.create(
+            sender=request.user,
+            receiver=ticket.created_by,
+            message=message
+        )
+        
+        # Create history
+        TicketHistory.objects.create(
+            ticket=ticket,
+            user=request.user,
+            action="user_notified",
+            description=f"User notified about ticket resolution by {request.user.full_name}",
+            new_value=message[:200]
+        )
+        
+        return Response({"detail": "User notified successfully"})
+    
+    @action(detail=False, methods=["get"], url_path="users-by-role")
+    def users_by_role(self, request):
+        """Get users by role for forwarding tickets"""
+        role_name = request.query_params.get("role")
+        user_roles = list(request.user.user_roles.select_related("role").values_list("role__name", flat=True))
+        
+        # Only support/admin can access this
+        if "Support" not in user_roles and "Admin" not in user_roles and "SuperAdmin" not in user_roles:
+            return Response(
+                {"error": "Access denied"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if not role_name:
+            return Response(
+                {"error": "role parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        users = CustomUser.objects.filter(
+            user_roles__role__name=role_name,
+            is_active=True
+        ).distinct().values("id", "full_name", "email", "username")
+        
+        return Response(list(users))
 
 
 class TicketCommentViewSet(viewsets.ModelViewSet):

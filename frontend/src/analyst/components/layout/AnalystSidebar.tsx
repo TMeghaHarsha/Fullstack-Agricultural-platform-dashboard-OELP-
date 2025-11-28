@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Bell, Settings, Sprout, ChevronRight } from "lucide-react";
+import { LayoutDashboard, FileText, Bell, Settings, Sprout, ChevronRight, AlertCircle } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
@@ -7,6 +7,7 @@ const navItems = [
   { title: "Dashboard", url: "/analyst/dashboard", icon: LayoutDashboard },
   { title: "Reports", url: "/analyst/reports", icon: FileText },
   { title: "Notifications", url: "/analyst/notifications", icon: Bell },
+  { title: "Issues", url: "/analyst/issues", icon: AlertCircle },
   { title: "Settings", url: "/analyst/settings", icon: Settings },
 ];
 

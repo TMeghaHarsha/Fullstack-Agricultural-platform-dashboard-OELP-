@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertTriangle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { AlertTriangle, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 
 const Settings = () => {
@@ -55,6 +56,13 @@ const Settings = () => {
 
   const [deleteAccountDialog, setDeleteAccountDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
+  const [supportTicket, setSupportTicket] = useState({
+    title: "",
+    description: "",
+    category: "general",
+    priority: "medium",
+  });
 
   const handleUpdateProfile = () => {
     fetch(`${API_URL}/auth/me/`, {
@@ -122,6 +130,32 @@ const Settings = () => {
       }
     } catch (error) {
       toast.error("Failed to delete account");
+    }
+  };
+
+  const handleSubmitSupportTicket = async () => {
+    if (!supportTicket.title || !supportTicket.description) {
+      toast.error("Please fill in title and description");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/support-tickets/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(supportTicket),
+      });
+
+      if (res.ok) {
+        toast.success("Support ticket created successfully! Our support team will review it soon.");
+        setSupportTicket({ title: "", description: "", category: "general", priority: "medium" });
+        setShowSupportDialog(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.detail || "Failed to create support ticket");
+      }
+    } catch (error) {
+      toast.error("Failed to create support ticket");
     }
   };
 
@@ -296,6 +330,96 @@ const Settings = () => {
               onCheckedChange={(checked) => setNotifications({ ...notifications, weather: checked })}
             />
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HelpCircle className="h-5 w-5" />
+            Support & Help
+          </CardTitle>
+          <CardDescription>Need assistance? Create a support ticket</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Dialog open={showSupportDialog} onOpenChange={setShowSupportDialog}>
+            <DialogTrigger asChild>
+              <Button>Create Support Ticket</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Create Support Ticket</DialogTitle>
+                <DialogDescription>
+                  Describe your issue and our support team will help you resolve it.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ticket-title">Title *</Label>
+                  <Input
+                    id="ticket-title"
+                    placeholder="Brief description of your issue"
+                    value={supportTicket.title}
+                    onChange={(e) => setSupportTicket({ ...supportTicket, title: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ticket-description">Description *</Label>
+                  <Textarea
+                    id="ticket-description"
+                    placeholder="Please provide detailed information about your issue..."
+                    rows={6}
+                    value={supportTicket.description}
+                    onChange={(e) => setSupportTicket({ ...supportTicket, description: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ticket-category">Category</Label>
+                    <Select
+                      value={supportTicket.category}
+                      onValueChange={(value) => setSupportTicket({ ...supportTicket, category: value })}
+                    >
+                      <SelectTrigger id="ticket-category">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="general">General Inquiry</SelectItem>
+                        <SelectItem value="crop">Crop Management</SelectItem>
+                        <SelectItem value="transaction">Payment/Transaction</SelectItem>
+                        <SelectItem value="analysis">Data Analysis</SelectItem>
+                        <SelectItem value="software_issue">Software Issue</SelectItem>
+                        <SelectItem value="technical">Technical Support</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="ticket-priority">Priority</Label>
+                    <Select
+                      value={supportTicket.priority}
+                      onValueChange={(value) => setSupportTicket({ ...supportTicket, priority: value })}
+                    >
+                      <SelectTrigger id="ticket-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowSupportDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSubmitSupportTicket}>Submit Request</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 

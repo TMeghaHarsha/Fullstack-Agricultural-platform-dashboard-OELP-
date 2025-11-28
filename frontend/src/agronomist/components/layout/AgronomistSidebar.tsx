@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Sprout, Bell, Users, Settings } from "lucide-react";
+import { LayoutDashboard, Sprout, Bell, Users, Settings, AlertCircle } from "lucide-react";
 
 export function AgronomistSidebar() {
   const link = (to: string, label: string, Icon: any) => (
@@ -29,6 +29,7 @@ export function AgronomistSidebar() {
         {link("/agronomist/crops", "Crops", Sprout)}
         {link("/agronomist/notifications", "Notifications", Bell)}
         {link("/agronomist/users", "Users", Users)}
+        {link("/agronomist/issues", "Issues", AlertCircle)}
         {link("/agronomist/settings", "Settings", Settings)}
       </nav>
     </aside>
