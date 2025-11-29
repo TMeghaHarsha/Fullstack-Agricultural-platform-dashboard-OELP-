@@ -75,8 +75,7 @@ def get_users_by_roles(
     if crop_type:
         crop_user_ids = Field.objects.filter(
             Q(crop__name__icontains=crop_type)
-            | Q(crop_variety__name__icontains(crop_type)
-            )
+            | Q(crop_variety__name__icontains=crop_type)
         ).values_list("user_id", flat=True)
         qs = qs.filter(id__in=crop_user_ids)
 

@@ -81,9 +81,18 @@ export default function RoleNotificationCenter({ title, description }: Props) {
       const resp = await fetch(`${API_URL}/notification-center/allowed-receivers/`, { headers });
       if (resp.ok) {
         const data = await resp.json();
-        setAllowedRoles(data.allowed_receivers || data.roles || []);
+        const roles = data.allowed_receivers || data.roles || [];
+        setAllowedRoles(roles);
+        if (roles.length === 0) {
+          console.warn("No allowed receiver roles returned from API. User may not have permission to send notifications.");
+        }
+      } else {
+        const errorData = await resp.json().catch(() => ({}));
+        console.error("Failed to fetch allowed roles:", resp.status, errorData);
+        setAllowedRoles([]);
       }
-    } catch {
+    } catch (error) {
+      console.error("Error fetching allowed roles:", error);
       setAllowedRoles([]);
     }
   }, [headers, token]);
@@ -168,12 +177,15 @@ export default function RoleNotificationCenter({ title, description }: Props) {
     if (!senderName && !senderRole) return "System";
     
     const currentUserRoles = getUserRoles();
+    // Check if current user (receiver) is an end-user
     const isEndUser = currentUserRoles.some(
-      (role) => role?.toLowerCase().replace(/[-_\s]/g, "") === "endappuser" || 
-                role?.toLowerCase().replace(/[-_\s]/g, "") === "enduser"
+      (role) => {
+        const normalized = role?.toLowerCase().replace(/[-_\s]/g, "");
+        return normalized === "endappuser" || normalized === "enduser" || role === "End-App-User";
+      }
     );
     
-    // For end-users: show only role name
+    // For end-users: show only the SENDER's role name (not the name)
     if (isEndUser) {
       return senderRole || "System";
     }

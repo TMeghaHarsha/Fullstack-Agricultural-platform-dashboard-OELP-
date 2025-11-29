@@ -28,7 +28,11 @@ export const getAuthHeader = (): { Authorization: string } | {} => {
 // User role helpers
 export const getUserRoles = (): string[] => {
   if (typeof window === 'undefined') return [];
-  const userData = localStorage.getItem('user_data');
+  // Try both 'user_data' and 'user' keys (different parts of the app use different keys)
+  let userData = localStorage.getItem('user_data');
+  if (!userData) {
+    userData = localStorage.getItem('user');
+  }
   if (!userData) return [];
   try {
     const user = JSON.parse(userData);

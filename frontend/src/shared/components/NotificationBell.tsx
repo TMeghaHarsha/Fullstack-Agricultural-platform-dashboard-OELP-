@@ -22,12 +22,15 @@ function formatSenderDisplay(senderName: string | null | undefined, senderRole: 
   if (!senderName && !senderRole) return "System";
   
   const currentUserRoles = getUserRoles();
+  // Check if current user (receiver) is an end-user
   const isEndUser = currentUserRoles.some(
-    (role) => role?.toLowerCase().replace(/[-_\s]/g, "") === "endappuser" || 
-              role?.toLowerCase().replace(/[-_\s]/g, "") === "enduser"
+    (role) => {
+      const normalized = role?.toLowerCase().replace(/[-_\s]/g, "");
+      return normalized === "endappuser" || normalized === "enduser" || role === "End-App-User";
+    }
   );
   
-  // For end-users: show only role name
+  // For end-users: show only the SENDER's role name (not the name)
   if (isEndUser) {
     return senderRole || "System";
   }
