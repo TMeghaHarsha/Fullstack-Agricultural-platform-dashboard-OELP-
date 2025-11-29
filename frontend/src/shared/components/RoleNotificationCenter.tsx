@@ -212,12 +212,10 @@ export default function RoleNotificationCenter({ title, description }: Props) {
             <Check className="mr-2 h-4 w-4" />
             Mark All Read
           </Button>
-          {allowedRoles.length > 0 && (
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Notification
-            </Button>
-          )}
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Notification
+          </Button>
         </div>
       </div>
 

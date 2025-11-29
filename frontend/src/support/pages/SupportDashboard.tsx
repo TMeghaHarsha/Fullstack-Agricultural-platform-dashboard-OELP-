@@ -133,10 +133,10 @@ export default function SupportDashboard() {
   const handleCloseTicket = async () => {
     if (!selectedTicket) return;
     try {
-      const res = await fetch(`${API_URL}/support-tickets/${selectedTicket.id}/update_status/`, {
+      const res = await fetch(`${API_URL}/support-tickets/${selectedTicket.id}/close/`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ status: "closed" }),
+        body: JSON.stringify({}),
       });
 
       if (res.ok) {
