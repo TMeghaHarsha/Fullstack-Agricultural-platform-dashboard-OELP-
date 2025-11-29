@@ -381,9 +381,60 @@ class UserPlanSerializer(serializers.ModelSerializer):
 
 
 class NotificationSerializer(serializers.ModelSerializer):
+    sender_name = serializers.SerializerMethodField()
+    sender_role = serializers.SerializerMethodField()
+    receiver_name = serializers.SerializerMethodField()
+    receiver_role = serializers.SerializerMethodField()
+
     class Meta:
         model = Notification
-        fields = ("id", "sender", "receiver", "message", "is_read", "created_at")
+        fields = (
+            "id",
+            "sender",
+            "sender_name",
+            "sender_role",
+            "receiver",
+            "receiver_name",
+            "receiver_role",
+            "message",
+            "notification_type",
+            "cause",
+            "tags",
+            "region",
+            "crop_type",
+            "metadata",
+            "is_read",
+            "created_at",
+        )
+        read_only_fields = ("sender", "receiver", "created_at")
+
+    def _first_role(self, user: CustomUser | None):
+        if not user:
+            return None
+        try:
+            return (
+                user.user_roles.select_related("role")
+                .values_list("role__name", flat=True)
+                .first()
+            )
+        except Exception:
+            return None
+
+    def get_sender_name(self, obj):
+        if obj.sender:
+            return obj.sender.full_name or obj.sender.username or obj.sender.email
+        return "System"
+
+    def get_sender_role(self, obj):
+        return self._first_role(obj.sender)
+
+    def get_receiver_name(self, obj):
+        if obj.receiver:
+            return obj.receiver.full_name or obj.receiver.username or obj.receiver.email
+        return None
+
+    def get_receiver_role(self, obj):
+        return self._first_role(obj.receiver)
 
 
 class SupportRequestSerializer(serializers.ModelSerializer):

@@ -26,7 +26,7 @@ export default function SupportDashboard() {
   const [showForwardDialog, setShowForwardDialog] = useState(false);
   const [showNotifyDialog, setShowNotifyDialog] = useState(false);
   const [forwardRole, setForwardRole] = useState("");
-  const [forwardUser, setForwardUser] = useState("");
+  const [forwardUser, setForwardUser] = useState("all");
   const [usersByRole, setUsersByRole] = useState<any[]>([]);
   const [notifyMessage, setNotifyMessage] = useState("");
   const [activeTab, setActiveTab] = useState("all");
@@ -82,7 +82,7 @@ export default function SupportDashboard() {
         headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           role: forwardRole,
-          user_id: forwardUser || null,
+          user_id: forwardUser === "all" ? null : forwardUser,
         }),
       });
 
@@ -417,20 +417,32 @@ export default function SupportDashboard() {
                 </SelectContent>
               </Select>
             </div>
-            {forwardRole && usersByRole.length > 0 && (
+            {forwardRole && (
               <div className="space-y-2">
                 <Label>Select Specific User (Optional)</Label>
                 <Select value={forwardUser} onValueChange={setForwardUser}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a user (optional)" />
                   </SelectTrigger>
+                
                   <SelectContent>
-                    <SelectItem value="">All users with this role</SelectItem>
-                    {usersByRole.map((user) => (
-                      <SelectItem key={user.id} value={user.id.toString()}>
-                        {user.full_name || user.email || user.username}
-                      </SelectItem>
-                    ))}
+                    {/* Default option */}
+                    <SelectItem value="all">All users with this role</SelectItem>
+                
+                    {/* Users list */}
+                    {Array.isArray(usersByRole) && usersByRole.length > 0 ? (
+                      usersByRole.map((user) => {
+                        if (!user || !user.id) return null;
+                
+                        return (
+                          <SelectItem key={user.id} value={String(user.id)}>
+                            {user.full_name || user.email || user.username || "Unknown User"}
+                          </SelectItem>
+                        );
+                      })
+                    ) : (
+                      <SelectItem value="none" disabled>No users available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

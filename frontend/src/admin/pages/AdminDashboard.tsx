@@ -69,7 +69,7 @@ export default function AdminDashboard() {
             fetch(`${API_URL}/admin/analytics/`, { headers: { Authorization: `Token ${token}` } }),
             fetch(`${API_URL}/transactions/`, { headers: { Authorization: `Token ${token}` } }),
             fetch(`${API_URL}/admin/fields/`, { headers: { Authorization: `Token ${token}` } }),
-            fetch(`${API_URL}/admin/notifications/`, { headers: { Authorization: `Token ${token}` } }),
+            fetch(`${API_URL}/notification-center/?type=received`, { headers: { Authorization: `Token ${token}` } }),
             fetch(`${API_URL}/admin/users/`, { headers: { Authorization: `Token ${token}` } }),
           ]);
           const adminData = adminRes && adminRes.ok ? await adminRes.json() : null;

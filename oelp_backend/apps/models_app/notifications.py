@@ -5,28 +5,57 @@ from django.db import models
 from .user import CustomUser
 
 
+class NotificationType(models.TextChoices):
+    GENERAL = "general", "General"
+    ALERT = "alert", "Alert"
+    UPDATE = "update", "Update"
+    SUPPORT = "support", "Support"
+    REMINDER = "reminder", "Reminder"
+
+
 class Notification(models.Model):
-    sender = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, related_name="sent_notifications")
-    receiver = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name="notifications")
+    sender = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="sent_notifications",
+    )
+    receiver = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
     message = models.TextField()
+    notification_type = models.CharField(
+        max_length=32,
+        choices=NotificationType.choices,
+        default=NotificationType.GENERAL,
+    )
+    cause = models.CharField(max_length=64, blank=True, null=True)
+    tags = models.JSONField(default=dict, blank=True)
+    region = models.CharField(max_length=100, blank=True, null=True)
+    crop_type = models.CharField(max_length=100, blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
 
     def __str__(self) -> str:  # pragma: no cover
         return f"Notification to {self.receiver}"
 
     def save(self, *args, **kwargs):
-        """Block support ticket notifications from being saved"""
-        message = str(self.message) if self.message else ''
-        notification_type = self.notification_type if hasattr(self, 'notification_type') else ''
-        related_type = self.related_object_type if hasattr(self, 'related_object_type') else ''
+        """Block legacy support ticket notifications from being saved"""
+        message = (self.message or "").lower()
+        notification_type = getattr(self, "notification_type", "")
+        related_type = (self.metadata or {}).get("related_type")
 
-        # Block all support ticket notifications
-        if ('Support request' in message or
-            'support request' in message.lower() or
-            notification_type == 'support_ticket' or
-            related_type == 'support_ticket'):
-            # Don't save - return without calling super()
+        if (
+            "support request" in message
+            or notification_type == "support_ticket"
+            or related_type == "support_ticket"
+        ):
             return None
 
         super().save(*args, **kwargs)

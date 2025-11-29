@@ -18,6 +18,8 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 
 from apps.models_app.token import UserAuthToken
 from apps.models_app.user import CustomUser, Role, UserRole
@@ -618,80 +620,6 @@ class AdminRolesViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = RoleSerializer
 
 
-class AdminNotificationsViewSet(viewsets.ModelViewSet):
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [HasRole]
-    required_roles = ["SuperAdmin", "Admin", "Support", "Business", "Developer", "Analyst"]
-    serializer_class = NotificationSerializer
-
-    def get_queryset(self):
-        return (
-            Notification.objects.all()
-            .select_related("receiver", "sender")
-            .order_by("-created_at")
-        )
-
-    def create(self, request, *args, **kwargs):
-        message = request.data.get("message", "").strip()
-        if not message:
-            return Response({"detail": "message is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Accept either a single receiver or a list of target_roles for bulk send
-        target_roles = request.data.get("target_roles") or []
-        if isinstance(target_roles, str):
-            try:
-                # support comma separated values
-                target_roles = [r.strip() for r in target_roles.split(",") if r.strip()]
-            except Exception:
-                target_roles = []
-
-        if target_roles:
-            try:
-                users_qs = CustomUser.objects.filter(
-                    user_roles__role__name__in=target_roles
-                ).distinct()
-                created = 0
-                for u in users_qs:
-                    Notification.objects.create(sender=request.user, receiver=u, message=message)
-                    created += 1
-                return Response({"sent": created}, status=status.HTTP_201_CREATED)
-            except Exception as e:
-                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Fallback to a single receiver or self
-        receiver_id = request.data.get("receiver")
-        receiver = None
-        if receiver_id:
-            receiver = CustomUser.objects.filter(pk=receiver_id).first()
-        obj = Notification.objects.create(
-            sender=request.user,
-            receiver=receiver or request.user,
-            message=message,
-        )
-        serializer = self.get_serializer(obj)
-        # Record activity for sender
-        try:
-            ct = ContentType.objects.get_for_model(obj.__class__)
-            UserActivity.objects.create(
-                user=request.user,
-                action="create",
-                content_type=ct,
-                object_id=obj.pk,
-                description=f"Sent notification to {(receiver.full_name if receiver else request.user.full_name) or (receiver.username if receiver else request.user.username)}",
-            )
-        except Exception:
-            pass
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    @action(detail=True, methods=["post"], url_path="mark-read")
-    def mark_read(self, request, pk=None):
-        obj = self.get_object()
-        obj.is_read = True
-        obj.save(update_fields=["is_read"])
-        return Response({"status": "ok"})
-
-
 class AdminFieldViewSet(viewsets.ReadOnlyModelViewSet):
     authentication_classes = [TokenAuthentication]
     permission_classes = [HasRole]
@@ -1128,7 +1056,21 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = NotificationSerializer
 
     def get_queryset(self):
-        return Notification.objects.filter(receiver=self.request.user)
+        user = self.request.user
+        scope = (self.request.query_params.get("type") or "received").lower()
+        qs = Notification.objects.select_related("sender", "receiver")
+        if scope == "sent":
+            qs = qs.filter(sender=user)
+        else:
+            qs = qs.filter(receiver=user)
+        if self.request.query_params.get("unread_only") in {"1", "true", "True"}:
+            qs = qs.filter(is_read=False)
+        return qs.order_by("-created_at")
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["request"] = self.request
+        return ctx
 
     @action(detail=False, methods=["get"])
     def unread_count(self, request):
@@ -1141,6 +1083,11 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         notif.is_read = True
         notif.save(update_fields=["is_read"])
         return Response({"detail": "Marked as read"})
+
+    @action(detail=False, methods=["post"])
+    def mark_all_read(self, request):
+        updated = self.get_queryset().filter(is_read=False).update(is_read=True)
+        return Response({"detail": f"{updated} notifications marked as read"})
 
 
 class SupportRequestViewSet(viewsets.ModelViewSet):
@@ -1176,11 +1123,103 @@ class SupportRequestViewSet(viewsets.ModelViewSet):
                 Notification.objects.create(
                     sender=self.request.user,
                     receiver=u,
-                    message=f"Support request ({category}) from {self.request.user.username}: {obj.description[:140]}"
+                    message=f"Support request ({category}) from {self.request.user.username}: {obj.description[:140]}",
+                    notification_type="support",
+                    cause="support_request",
+                    tags={"category": category},
+                    metadata={"support_request_id": obj.id},
                 )
         except Exception:
             # Non-critical
             pass
+
+
+class NotificationCenterViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [HasRole]
+    required_roles = [
+        "SuperAdmin",
+        "Admin",
+        "Support",
+        "Business",
+        "Developer",
+        "Analyst",
+        "Agronomist",
+    ]
+    serializer_class = NotificationSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+        scope = (self.request.query_params.get("type") or "received").lower()
+        qs = Notification.objects.select_related("sender", "receiver").order_by("-created_at")
+        if scope == "sent":
+            qs = qs.filter(sender=user)
+        elif scope == "all":
+            qs = qs.filter(Q(sender=user) | Q(receiver=user))
+        else:
+            qs = qs.filter(receiver=user)
+        return qs
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx["request"] = self.request
+        return ctx
+
+    def _allowed_roles(self, user: CustomUser) -> set[str]:
+        role_names = user.user_roles.select_related("role").values_list("role__name", flat=True)
+        allowed: set[str] = set()
+        for role in role_names:
+            allowed.update(get_allowed_receivers(role).get("roles", []))
+        normalized = {normalize_role(r) for r in allowed if r}
+        return normalized
+
+    @action(detail=False, methods=["get"], url_path="allowed-receivers")
+    def allowed_receivers(self, request):
+        allowed = sorted(filter(None, self._allowed_roles(request.user)))
+        return Response({"allowed_receivers": allowed})
+
+    def create(self, request, *args, **kwargs):
+        message = (request.data.get("message") or "").strip()
+        if not message:
+            return Response({"detail": "Message is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        receiver_role = normalize_role(
+            request.data.get("receiver_role") or request.data.get("target_role")
+        )
+        if not receiver_role:
+            return Response({"detail": "receiver_role is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        allowed = self._allowed_roles(request.user)
+        if receiver_role not in allowed:
+            return Response(
+                {"detail": f"Receiver role '{receiver_role}' is not allowed for your account."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        notification_type = request.data.get("notification_type", "general")
+        cause = request.data.get("cause", "user_action")
+        region = request.data.get("region")
+        crop_type = request.data.get("crop_type")
+        tags = request.data.get("tags")
+        metadata = request.data.get("metadata")
+
+        sent_count, details = send_notification(
+            sender=request.user,
+            message=message,
+            receiver_roles=[receiver_role],
+            notification_type=notification_type,
+            cause=cause,
+            tags=tags if isinstance(tags, dict) else {},
+            region=region,
+            crop_type=crop_type,
+            metadata=metadata if isinstance(metadata, dict) else {},
+        )
+
+        if not sent_count:
+            return Response({"detail": "No recipients matched the criteria."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"sent": sent_count, "details": details}, status=status.HTTP_201_CREATED)
 
 
 class PracticeViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
@@ -2258,13 +2297,18 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        message = request.data.get("message", f"Your ticket #{ticket.ticket_number} has been resolved. {ticket.resolution_notes or ''}")
-        
-        # Notify ticket creator
+        message = request.data.get(
+            "message",
+            f"Your ticket #{ticket.ticket_number} has been resolved. {ticket.resolution_notes or ''}",
+        )
+
         Notification.objects.create(
             sender=request.user,
             receiver=ticket.created_by,
-            message=message
+            message=message,
+            notification_type="support",
+            cause="support",
+            tags={"ticket": ticket.ticket_number},
         )
         
         # Create history
@@ -2280,28 +2324,21 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=["get"], url_path="users-by-role")
     def users_by_role(self, request):
-        """Get users by role for forwarding tickets"""
         role_name = request.query_params.get("role")
-        user_roles = list(request.user.user_roles.select_related("role").values_list("role__name", flat=True))
-        
-        # Only support/admin can access this
+        user_roles = list(request.user.user_roles.select_related("role")
+                          .values_list("role__name", flat=True))
+    
         if "Support" not in user_roles and "Admin" not in user_roles and "SuperAdmin" not in user_roles:
-            return Response(
-                {"error": "Access denied"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+            return Response({"error": "Access denied"}, status=403)
+    
         if not role_name:
-            return Response(
-                {"error": "role parameter is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({"error": "role parameter is required"}, status=400)
+    
         users = CustomUser.objects.filter(
-            user_roles__role__name=role_name,
+            user_roles__role__name__iexact=role_name,
             is_active=True
         ).distinct().values("id", "full_name", "email", "username")
-        
+    
         return Response(list(users))
 
 
@@ -2393,15 +2430,9 @@ class TicketHistoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 from .serializers import UserSerializer  # noqa: E402
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
+@require_http_methods(["GET", "HEAD"])
 def health_check(request):
-    """Simple health check endpoint"""
-    return Response({
-        'status': 'ok',
-        'debug': settings.DEBUG,
-        'database': 'connected' if connection.ensure_connection() else 'disconnected'
-    })
+    return JsonResponse({"status": "ok"})
 
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])

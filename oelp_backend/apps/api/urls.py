@@ -30,7 +30,8 @@ router.register(r"payment-methods", views.PaymentMethodViewSet, basename="paymen
 router.register(r"transactions", views.TransactionViewSet, basename="transaction")
 router.register(r"admin/users", views.AdminUsersViewSet, basename="admin-users")
 router.register(r"admin/roles", views.AdminRolesViewSet, basename="admin-roles")
-router.register(r"admin/notifications", views.AdminNotificationsViewSet, basename="admin-notifications")
+router.register(r"notification-center", views.NotificationCenterViewSet, basename="notification-center")
+router.register(r"admin/notifications", views.NotificationCenterViewSet, basename="admin-notifications")
 router.register(r"admin/fields", views.AdminFieldViewSet, basename="admin-fields")
 router.register(r"users", views.UsersReadOnlyViewSet, basename="users-readonly")
 

@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { Bell, User, Shield } from "lucide-react";
+import { User, Shield } from "lucide-react";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -30,9 +30,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "./ui/label";
+import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toast } from "sonner";
+import { NotificationBell } from "@/shared/components/NotificationBell";
 
 interface LayoutProps {
   children: ReactNode;
@@ -43,31 +45,27 @@ export function Layout({ children }: LayoutProps) {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showSupportDialog, setShowSupportDialog] = useState(false);
   const [showFaqDialog, setShowFaqDialog] = useState(false);
-  const [supportData, setSupportData] = useState({ category: "", description: "" });
+  const [supportData, setSupportData] = useState({
+    title: "",
+    category: "general",
+    priority: "medium",
+    description: "",
+  });
   const [me, setMe] = useState<{ full_name?: string; email?: string; roles?: string[] } | null>(null);
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [showNotifications, setShowNotifications] = useState(false);
+
+  const API_URL =
+    (import.meta as any).env.VITE_API_URL ||
+    (import.meta as any).env.REACT_APP_API_URL ||
+    "/api";
 
   useEffect(() => {
-    const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
     const token = localStorage.getItem("token");
     if (!token) return;
     fetch(`${API_URL}/auth/me/`, { headers: { Authorization: `Token ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMe(d))
       .catch(() => {});
-    const loadNotifications = async () => {
-      try {
-        const res = await fetch(`${API_URL}/notifications/`, { headers: { Authorization: `Token ${token}` } });
-        if (res.ok) {
-          const data = await res.json();
-          const items = Array.isArray(data.results) ? data.results : data;
-          setNotifications(items.slice(0, 5));
-        }
-      } catch {}
-    };
-    loadNotifications();
-  }, []);
+  }, [API_URL]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -76,23 +74,34 @@ export function Layout({ children }: LayoutProps) {
   };
 
   const handleSupportSubmit = async () => {
-    if (!supportData.category || !supportData.description) {
-      toast.error("Please fill in all fields");
+    if (!supportData.title || !supportData.description) {
+      toast.error("Please fill in the title and description");
       return;
     }
     const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).env.REACT_APP_API_URL || "/api";
     const token = localStorage.getItem("token");
-    const res = await fetch(`${API_URL}/support/`, {
+    const res = await fetch(`${API_URL}/support-tickets/`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Token ${token}` } : {}) },
-      body: JSON.stringify({ category: supportData.category, description: supportData.description }),
+      body: JSON.stringify({
+        title: supportData.title,
+        description: supportData.description,
+        category: supportData.category,
+        priority: supportData.priority,
+      }),
     });
     if (res.ok) {
-      toast.success("Support request submitted successfully");
+      toast.success("Support ticket submitted successfully");
       setShowSupportDialog(false);
-      setSupportData({ category: "", description: "" });
+      setSupportData({
+        title: "",
+        category: "general",
+        priority: "medium",
+        description: "",
+      });
     } else {
-      toast.error("Failed to submit support request");
+      const err = await res.json().catch(() => ({}));
+      toast.error(err.detail || "Failed to submit support ticket");
     }
   };
 
@@ -104,24 +113,7 @@ export function Layout({ children }: LayoutProps) {
           <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-6">
             <SidebarTrigger className="text-primary" />
             <div className="flex items-center gap-4">
-              <DropdownMenu open={showNotifications} onOpenChange={setShowNotifications}>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative">
-                    <Bell className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-                  <div className="px-2 py-1 text-sm text-muted-foreground">
-                    {notifications.length === 0 ? "No notifications" : "Latest updates"}
-                  </div>
-                  {notifications.map((n) => (
-                    <DropdownMenuItem key={n.id} className="whitespace-normal text-sm">
-                      {n.message}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <NotificationBell />
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -248,7 +240,7 @@ export function Layout({ children }: LayoutProps) {
       </Dialog>
 
       <Dialog open={showSupportDialog} onOpenChange={setShowSupportDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Contact Support</DialogTitle>
             <DialogDescription>
@@ -256,35 +248,63 @@ export function Layout({ children }: LayoutProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={supportData.category} onValueChange={(value) => setSupportData({ ...supportData, category: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="crop">Crop Related</SelectItem>
-                  <SelectItem value="transaction">Transaction</SelectItem>
-                  <SelectItem value="analysis">Analysis</SelectItem>
-                  <SelectItem value="software">Software Issue/Glitches</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="support-title">Title *</Label>
+                <Input
+                  id="support-title"
+                  placeholder="Brief summary of your issue"
+                  value={supportData.title}
+                  onChange={(e) => setSupportData((prev) => ({ ...prev, title: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={supportData.category} onValueChange={(value) => setSupportData((prev) => ({ ...prev, category: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">General Inquiry</SelectItem>
+                    <SelectItem value="crop">Crop Related</SelectItem>
+                    <SelectItem value="transaction">Transaction</SelectItem>
+                    <SelectItem value="analysis">Analysis</SelectItem>
+                    <SelectItem value="software_issue">Software Issue/Glitches</SelectItem>
+                    <SelectItem value="technical">Technical Support</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Priority</Label>
+                <Select value={supportData.priority} onValueChange={(value) => setSupportData((prev) => ({ ...prev, priority: value }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
+              <Label>Description *</Label>
               <Textarea
                 placeholder="Describe your problem..."
                 value={supportData.description}
-                onChange={(e) => setSupportData({ ...supportData, description: e.target.value })}
+                onChange={(e) => setSupportData((prev) => ({ ...prev, description: e.target.value }))}
                 rows={5}
               />
             </div>
             <Button onClick={handleSupportSubmit} className="w-full">
-              Submit Request
+              Submit Ticket
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
     </SidebarProvider>
   );
 }

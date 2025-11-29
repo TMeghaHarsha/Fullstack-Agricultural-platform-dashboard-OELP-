@@ -33,7 +33,7 @@ export const NotificationForm: React.FC<NotificationFormProps> = ({ onSuccess, u
     const fetchData = async () => {
       try {
         // Get allowed receiver roles
-        const rolesResponse = await apiRequest('GET', '/api/admin/notifications/allowed_receivers/');
+        const rolesResponse = await apiRequest('GET', '/notification-center/allowed-receivers/');
         const roles = rolesResponse.roles || [];
         setAvailableRoles(roles.map((role: string) => ({
           value: role,
@@ -102,7 +102,7 @@ export const NotificationForm: React.FC<NotificationFormProps> = ({ onSuccess, u
         payload.crop_type = cropType;
       }
 
-      await apiRequest('POST', '/api/admin/notifications/', payload);
+      await apiRequest('POST', '/notification-center/', payload);
       
       toast({
         title: 'Success',
