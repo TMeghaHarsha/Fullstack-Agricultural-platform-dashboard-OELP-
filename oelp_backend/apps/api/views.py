@@ -71,6 +71,7 @@ from apps.models_app.support_ticket import SupportTicket, TicketComment, TicketH
 from apps.models_app.irrigation import IrrigationMethods
 from apps.models_app.models import UserActivity
 from apps.models_app.soil_report import SoilReport, SoilTexture
+from apps.utils.notification_utils import get_allowed_receivers, normalize_role, send_notification
 
 razorpay = None
 
