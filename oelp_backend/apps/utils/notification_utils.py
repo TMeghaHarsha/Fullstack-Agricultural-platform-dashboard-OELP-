@@ -81,28 +81,28 @@ def send_notification(
 
     normalized_roles = [normalize_role(r) for r in receiver_roles]
     users = get_users_by_roles(normalized_roles, region=region, crop_type=crop_type)
-
+    
     tags_payload = tags.copy() if isinstance(tags, dict) else {}
     if region:
         tags_payload["region"] = region
     if crop_type:
         tags_payload["crop_type"] = crop_type
-
+    
     notifications: List[Notification] = []
     details: List[Dict] = []
-
+    
     with transaction.atomic():
         for user in users:
             notifications.append(
                 Notification(
-                    sender=sender,
-                    receiver=user,
-                    message=message,
-                    notification_type=notification_type,
-                    cause=cause,
+                sender=sender,
+                receiver=user,
+                message=message,
+                notification_type=notification_type,
+                cause=cause,
                     tags=tags_payload,
-                    region=region,
-                    crop_type=crop_type,
+                region=region,
+                crop_type=crop_type,
                     metadata=metadata or {},
                 )
             )
@@ -117,5 +117,5 @@ def send_notification(
             )
 
         Notification.objects.bulk_create(notifications)
-
+    
     return len(notifications), details

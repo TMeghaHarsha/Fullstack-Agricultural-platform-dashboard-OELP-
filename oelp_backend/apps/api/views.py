@@ -1184,16 +1184,45 @@ class NotificationCenterViewSet(viewsets.ModelViewSet):
         if not message:
             return Response({"detail": "Message is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        receiver_role = normalize_role(
-            request.data.get("receiver_role") or request.data.get("target_role")
+        # Accept either a single role or multiple roles from the payload
+        raw_roles = (
+            request.data.get("receiver_roles")
+            or request.data.get("target_roles")
+            or request.data.get("receiver_role")
+            or request.data.get("target_role")
         )
-        if not receiver_role:
-            return Response({"detail": "receiver_role is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not raw_roles:
+            return Response(
+                {"detail": "At least one receiver role is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Normalise into a list
+        if isinstance(raw_roles, (list, tuple, set)):
+            receiver_roles = list(raw_roles)
+        else:
+            receiver_roles = [raw_roles]
+
+        # Normalise role names and drop empties
+        normalized_roles = [normalize_role(r) for r in receiver_roles if r]
+        if not normalized_roles:
+            return Response(
+                {"detail": "At least one valid receiver role is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         allowed = self._allowed_roles(request.user)
-        if receiver_role not in allowed:
+        # Find any roles not permitted for this sender
+        invalid = [r for r in normalized_roles if r not in allowed]
+        if invalid:
             return Response(
-                {"detail": f"Receiver role '{receiver_role}' is not allowed for your account."},
+                {
+                    "detail": (
+                        "One or more receiver roles are not allowed for your account: "
+                        + ", ".join(sorted(set(invalid)))
+                    )
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -1207,7 +1236,7 @@ class NotificationCenterViewSet(viewsets.ModelViewSet):
         sent_count, details = send_notification(
             sender=request.user,
             message=message,
-            receiver_roles=[receiver_role],
+            receiver_roles=normalized_roles,
             notification_type=notification_type,
             cause=cause,
             tags=tags if isinstance(tags, dict) else {},

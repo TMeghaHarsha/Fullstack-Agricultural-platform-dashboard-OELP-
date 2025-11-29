@@ -130,6 +130,29 @@ export default function SupportDashboard() {
     }
   };
 
+  const handleCloseTicket = async () => {
+    if (!selectedTicket) return;
+    try {
+      const res = await fetch(`${API_URL}/support-tickets/${selectedTicket.id}/update_status/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify({ status: "closed" }),
+      });
+
+      if (res.ok) {
+        toast.success("Ticket closed successfully");
+        setShowTicketDialog(false);
+        setSelectedTicket(null);
+        loadTickets();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.error || "Failed to close ticket");
+      }
+    } catch (error) {
+      toast.error("Failed to close ticket");
+    }
+  };
+
   const loadUsersByRole = async (role: string) => {
     if (!role) return;
     try {
@@ -374,22 +397,34 @@ export default function SupportDashboard() {
               )}
             </div>
           )}
-          <DialogFooter>
-            {selectedTicket?.status === "resolved" && (
-              <Button onClick={() => setShowNotifyDialog(true)}>
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Notify User
+          <DialogFooter className="flex justify-between gap-2">
+            <div className="flex gap-2">
+              {selectedTicket?.status === "resolved" && (
+                <Button onClick={() => setShowNotifyDialog(true)}>
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Notify User
+                </Button>
+              )}
+              {selectedTicket?.status !== "resolved" &&
+                selectedTicket?.status !== "closed" &&
+                !selectedTicket?.forwarded_to_role && (
+                  <Button onClick={() => setShowForwardDialog(true)}>
+                    <Send className="h-4 w-4 mr-2" />
+                    Forward Ticket
+                  </Button>
+                )}
+            </div>
+            <div className="flex gap-2">
+              {selectedTicket?.status !== "closed" && (
+                <Button variant="destructive" onClick={handleCloseTicket}>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Close Ticket
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowTicketDialog(false)}>
+                Close
               </Button>
-            )}
-            {selectedTicket?.status !== "resolved" && selectedTicket?.status !== "closed" && !selectedTicket?.forwarded_to_role && (
-              <Button onClick={() => setShowForwardDialog(true)}>
-                <Send className="h-4 w-4 mr-2" />
-                Forward Ticket
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setShowTicketDialog(false)}>
-              Close
-            </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

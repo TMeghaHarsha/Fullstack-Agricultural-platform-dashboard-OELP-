@@ -258,17 +258,17 @@ export function Layout({ children }: LayoutProps) {
                   onChange={(e) => setSupportData((prev) => ({ ...prev, title: e.target.value }))}
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Category</Label>
+            <div className="space-y-2">
+              <Label>Category</Label>
                 <Select value={supportData.category} onValueChange={(value) => setSupportData((prev) => ({ ...prev, category: value }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
                     <SelectItem value="general">General Inquiry</SelectItem>
-                    <SelectItem value="crop">Crop Related</SelectItem>
-                    <SelectItem value="transaction">Transaction</SelectItem>
-                    <SelectItem value="analysis">Analysis</SelectItem>
+                  <SelectItem value="crop">Crop Related</SelectItem>
+                  <SelectItem value="transaction">Transaction</SelectItem>
+                  <SelectItem value="analysis">Analysis</SelectItem>
                     <SelectItem value="software_issue">Software Issue/Glitches</SelectItem>
                     <SelectItem value="technical">Technical Support</SelectItem>
                   </SelectContent>
@@ -285,8 +285,8 @@ export function Layout({ children }: LayoutProps) {
                     <SelectItem value="medium">Medium</SelectItem>
                     <SelectItem value="high">High</SelectItem>
                     <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
+                </SelectContent>
+              </Select>
               </div>
             </div>
             <div className="space-y-2">
