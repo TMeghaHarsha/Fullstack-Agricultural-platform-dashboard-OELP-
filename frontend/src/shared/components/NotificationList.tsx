@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { apiRequest } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Bell, Mail, Send } from 'lucide-react';
+import { getUserRoles } from '@/lib/auth';
 
 type NotificationType = 'info' | 'alert' | 'warning' | 'success' | 'error';
 
@@ -24,6 +25,8 @@ interface Notification {
     username: string;
     full_name: string;
   } | null;
+  sender_name?: string;
+  sender_role?: string;
   receiver: {
     id: number;
     username: string;
@@ -39,6 +42,28 @@ const typeVariantMap = {
   success: 'success',
   error: 'destructive',
 } as const;
+
+// Helper to format sender display based on receiver role
+function formatSenderDisplay(senderName: string | null | undefined, senderRole: string | null | undefined): string {
+  if (!senderName && !senderRole) return "System";
+  
+  const currentUserRoles = getUserRoles();
+  const isEndUser = currentUserRoles.some(
+    (role) => role?.toLowerCase().replace(/[-_\s]/g, "") === "endappuser" || 
+              role?.toLowerCase().replace(/[-_\s]/g, "") === "enduser"
+  );
+  
+  // For end-users: show only role name
+  if (isEndUser) {
+    return senderRole || "System";
+  }
+  
+  // For other users: show "Name (Role)"
+  if (senderName && senderRole) {
+    return `${senderName} (${senderRole})`;
+  }
+  return senderName || senderRole || "System";
+}
 
 export const NotificationList: React.FC = () => {
   const [notifications, setNotifications] = useState<{
@@ -347,7 +372,10 @@ const NotificationTabContent: React.FC<NotificationTabContentProps> = ({
                   <span className="font-medium">
                     {type === 'sent' 
                       ? notification.receiver.full_name || notification.receiver.username
-                      : notification.sender?.full_name || notification.sender?.username || 'System'}
+                      : formatSenderDisplay(
+                          notification.sender_name || notification.sender?.full_name || notification.sender?.username,
+                          notification.sender_role
+                        )}
                   </span>
                 </p>
               </div>

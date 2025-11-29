@@ -9,7 +9,35 @@ from apps.models_app.field import Field
 User = get_user_model()
 
 
+def normalize_role(role: str | None) -> str | None:
+    """
+    Normalize role names coming from DB / client into canonical values used in flows.
+    """
+    if not role:
+        return role
+    key = role.replace("-", "").replace("_", "").replace(" ", "").lower()
+    aliases = {
+        # Core roles
+        "superadmin": "SuperAdmin",
+        "admin": "Admin",
+        "business": "Business",
+        "support": "Support",
+        "agronomist": "Agronomist",
+        "analyst": "Analyst",
+        "developer": "Developer",
+        # End user variants
+        "enduser": "End-App-User",
+        "endusers": "End-App-User",
+        "endappuser": "End-App-User",
+    }
+    return aliases.get(key, role)
+
+
 def get_allowed_receivers(sender_role: str) -> Dict[str, List[str]]:
+    """
+    Given a sender role (from DB), return the list of roles they are allowed to notify.
+    Role names are normalized so that 'support', 'Support', etc all work.
+    """
     flow = {
         "SuperAdmin": ["Admin"],
         "Admin": [
@@ -27,19 +55,8 @@ def get_allowed_receivers(sender_role: str) -> Dict[str, List[str]]:
         "Analyst": ["Admin", "End-App-User"],
         "Developer": ["Admin", "End-App-User"],
     }
-    return {"roles": flow.get(sender_role, [])}
-
-
-def normalize_role(role: str | None) -> str | None:
-    if not role:
-        return role
-    key = role.replace("-", "").replace("_", "").replace(" ", "").lower()
-    aliases = {
-        "enduser": "End-App-User",
-        "endusers": "End-App-User",
-        "endappuser": "End-App-User",
-    }
-    return aliases.get(key, role)
+    key = normalize_role(sender_role)
+    return {"roles": flow.get(key or sender_role, [])}
 
 
 def get_users_by_roles(

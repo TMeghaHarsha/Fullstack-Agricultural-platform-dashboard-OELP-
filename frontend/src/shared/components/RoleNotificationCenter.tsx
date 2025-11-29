@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, Send, Inbox, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { getUserRoles } from "@/lib/auth";
 import { MultiSelect } from "@/components/ui/multi-select";
 
 type NotificationItem = {
@@ -162,6 +163,28 @@ export default function RoleNotificationCenter({ title, description }: Props) {
 
   const showSegmentation = receiverRoles.includes("End-App-User");
 
+  // Helper to format sender display based on receiver role
+  const formatSenderDisplay = (senderName: string | null | undefined, senderRole: string | null | undefined): string => {
+    if (!senderName && !senderRole) return "System";
+    
+    const currentUserRoles = getUserRoles();
+    const isEndUser = currentUserRoles.some(
+      (role) => role?.toLowerCase().replace(/[-_\s]/g, "") === "endappuser" || 
+                role?.toLowerCase().replace(/[-_\s]/g, "") === "enduser"
+    );
+    
+    // For end-users: show only role name
+    if (isEndUser) {
+      return senderRole || "System";
+    }
+    
+    // For other users: show "Name (Role)"
+    if (senderName && senderRole) {
+      return `${senderName} (${senderRole})`;
+    }
+    return senderName || senderRole || "System";
+  };
+
   const renderNotificationCard = (item: NotificationItem, variant: "received" | "sent") => (
     <button
       key={item.id}
@@ -181,7 +204,7 @@ export default function RoleNotificationCenter({ title, description }: Props) {
       </div>
       <p className="mt-2 font-semibold text-sm">
         {variant === "received"
-          ? `From: ${item.sender_name || "System"}`
+          ? `From: ${formatSenderDisplay(item.sender_name, item.sender_role)}`
           : `To: ${item.receiver_name || "Recipient"}`}
       </p>
       <p className="text-sm text-muted-foreground line-clamp-2">{item.message}</p>
@@ -351,7 +374,11 @@ export default function RoleNotificationCenter({ title, description }: Props) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {activeNotification?.sender_name || activeNotification?.receiver_name || "Notification"}
+              {activeNotification 
+                ? activeNotification.sender_name || activeNotification.receiver_name
+                  ? formatSenderDisplay(activeNotification.sender_name, activeNotification.sender_role)
+                  : "Notification"
+                : "Notification"}
             </DialogTitle>
             <DialogDescription>
               {activeNotification?.notification_type

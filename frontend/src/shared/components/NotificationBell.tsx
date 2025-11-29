@@ -10,11 +10,34 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { getUserRoles } from "@/lib/auth";
 
 const API_URL =
   (import.meta as any).env.VITE_API_URL ||
   (import.meta as any).env.REACT_APP_API_URL ||
   "/api";
+
+// Helper to format sender display based on receiver role
+function formatSenderDisplay(senderName: string | null | undefined, senderRole: string | null | undefined): string {
+  if (!senderName && !senderRole) return "System";
+  
+  const currentUserRoles = getUserRoles();
+  const isEndUser = currentUserRoles.some(
+    (role) => role?.toLowerCase().replace(/[-_\s]/g, "") === "endappuser" || 
+              role?.toLowerCase().replace(/[-_\s]/g, "") === "enduser"
+  );
+  
+  // For end-users: show only role name
+  if (isEndUser) {
+    return senderRole || "System";
+  }
+  
+  // For other users: show "Name (Role)"
+  if (senderName && senderRole) {
+    return `${senderName} (${senderRole})`;
+  }
+  return senderName || senderRole || "System";
+}
 
 export function NotificationBell() {
   const [preview, setPreview] = useState<any[]>([]);
@@ -123,7 +146,7 @@ export function NotificationBell() {
                 >
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-foreground">
-                      {n.sender_name ? `From: ${n.sender_name}` : "Notification"}
+                      From: {formatSenderDisplay(n.sender_name, n.sender_role)}
                     </p>
                     {!n.is_read && <Badge variant="secondary">new</Badge>}
                   </div>
@@ -141,7 +164,11 @@ export function NotificationBell() {
       <Dialog open={!!activeNotification} onOpenChange={(next) => !next && setActiveNotification(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{activeNotification?.sender_name || "Notification"}</DialogTitle>
+            <DialogTitle>
+              {activeNotification 
+                ? formatSenderDisplay(activeNotification.sender_name, activeNotification.sender_role)
+                : "Notification"}
+            </DialogTitle>
             <DialogDescription>
               {activeNotification?.notification_type
                 ? `Type: ${activeNotification.notification_type}`
