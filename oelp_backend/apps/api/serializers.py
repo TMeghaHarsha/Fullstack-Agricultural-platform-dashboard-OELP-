@@ -23,7 +23,6 @@ from apps.models_app.user_plan import (
     PaymentMethod,
     Transaction,
 )
-from apps.models_app.user_preferences import UserPreferences
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -615,16 +614,3 @@ class SupportTicketCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class UserPreferencesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserPreferences
-        fields = (
-            "id",
-            "email_notifications",
-            "sms_notifications",
-            "push_notifications",
-            "weather_alerts",
-            "created_at",
-            "updated_at",
-        )
-        read_only_fields = ("id", "created_at", "updated_at")

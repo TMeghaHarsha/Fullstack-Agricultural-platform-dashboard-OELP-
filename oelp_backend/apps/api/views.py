@@ -56,7 +56,6 @@ from .serializers import (
     SupportTicketCreateSerializer,
     TicketCommentSerializer,
     TicketHistorySerializer,
-    UserPreferencesSerializer,
 )
 
 from apps.models_app.assets import Asset
@@ -72,7 +71,6 @@ from apps.models_app.support_ticket import SupportTicket, TicketComment, TicketH
 from apps.models_app.irrigation import IrrigationMethods
 from apps.models_app.models import UserActivity
 from apps.models_app.soil_report import SoilReport, SoilTexture
-from apps.models_app.user_preferences import UserPreferences
 from apps.utils.notification_utils import get_allowed_receivers, normalize_role, send_notification
 
 razorpay = None
@@ -2586,52 +2584,6 @@ def me_view(request):
         })
 
 
-class UserPreferencesViewSet(viewsets.ModelViewSet):
-    authentication_classes = [TokenAuthentication]
-    serializer_class = UserPreferencesSerializer
-    
-    def get_queryset(self):
-        return UserPreferences.objects.filter(user=self.request.user)
-    
-    def perform_create(self, serializer):
-        # Get or create preferences for the user
-        preferences, created = UserPreferences.objects.get_or_create(
-            user=self.request.user,
-            defaults=serializer.validated_data
-        )
-        if not created:
-            # Update existing preferences
-            for key, value in serializer.validated_data.items():
-                setattr(preferences, key, value)
-            preferences.save()
-            
-            # Send test notifications if enabled
-            if serializer.validated_data.get('email_notifications'):
-                try:
-                    from django.core.mail import send_mail
-                    send_mail(
-                        subject='Notification Preferences Updated',
-                        message='Your email notifications have been enabled. You will receive notifications via email.',
-                        from_email='noreply@agriplatform.com',
-                        recipient_list=[self.request.user.email],
-                        fail_silently=True,
-                    )
-                except Exception:
-                    pass
-            
-            if serializer.validated_data.get('sms_notifications') and self.request.user.phone_number:
-                try:
-                    # SMS sending would go here - using a service like Twilio
-                    # For now, we'll just log it
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"SMS notification enabled for {self.request.user.phone_number}")
-                except Exception:
-                    pass
-        
-        return preferences
-
-
 class AgribotChatView(APIView):
     authentication_classes = [TokenAuthentication]
     
@@ -2678,76 +2630,75 @@ class AgribotChatView(APIView):
             })
         
         # Use Gemini API
+        import os
+        gemini_api_key = os.getenv('GEMINI_API_KEY')
+        if not gemini_api_key:
+            return Response(
+                {"detail": "AI service not configured. Please set GEMINI_API_KEY environment variable."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        
+        # Create a context-aware prompt
+        prompt = f"""You are Agribot, an AI assistant for an agricultural platform. 
+        Answer questions about the website features including:
+        - Field management
+        - Crop management
+        - Irrigation practices
+        - Soil analysis
+        - Reports and analytics
+        - Subscriptions and plans
+        - Settings
+        
+        User question: {message}
+        
+        Provide a helpful, concise answer focused on the website features."""
+        
+        # Try to use google.generativeai library first
         try:
-            import os
-            gemini_api_key = os.getenv('GEMINI_API_KEY')
-            if not gemini_api_key:
-                return Response(
-                    {"detail": "AI service not configured"},
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel('gemini-pro')
+            response = model.generate_content(prompt)
             
-            # Try to import google.generativeai
+            # Safely extract text from response
+            if hasattr(response, 'text') and response.text:
+                return Response({"response": response.text})
+            else:
+                # Fallback to requests if response structure is unexpected
+                raise ValueError("Unexpected response format from genai library")
+                
+        except (ImportError, Exception) as e:
+            # Fallback: use requests to call Gemini API directly
             try:
-                import google.generativeai as genai
-            except ImportError:
-                # Fallback: use requests to call Gemini API directly
                 import requests
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={gemini_api_key}"
-                prompt = f"""You are Agribot, an AI assistant for an agricultural platform. 
-                Answer questions about the website features including:
-                - Field management
-                - Crop management
-                - Irrigation practices
-                - Soil analysis
-                - Reports and analytics
-                - Subscriptions and plans
-                - Notifications and settings
-                
-                User question: {message}
-                
-                Provide a helpful, concise answer focused on the website features."""
                 
                 payload = {
                     "contents": [{
                         "parts": [{"text": prompt}]
                     }]
                 }
-                response = requests.post(url, json=payload)
+                
+                response = requests.post(url, json=payload, timeout=30)
+                
                 if response.status_code == 200:
                     data = response.json()
                     text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Sorry, I could not generate a response.')
                     return Response({"response": text})
                 else:
+                    error_detail = f"API returned status {response.status_code}"
+                    try:
+                        error_data = response.json()
+                        error_detail = error_data.get('error', {}).get('message', error_detail)
+                    except:
+                        pass
                     return Response(
-                        {"detail": "Error communicating with AI service"},
+                        {"detail": f"Error communicating with AI service: {error_detail}"},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
-            
-            genai.configure(api_key=gemini_api_key)
-            model = genai.GenerativeModel('gemini-pro')
-            
-            # Create a context-aware prompt
-            prompt = f"""You are Agribot, an AI assistant for an agricultural platform. 
-            Answer questions about the website features including:
-            - Field management
-            - Crop management
-            - Irrigation practices
-            - Soil analysis
-            - Reports and analytics
-            - Subscriptions and plans
-            - Notifications and settings
-            
-            User question: {message}
-            
-            Provide a helpful, concise answer focused on the website features."""
-            
-            response = model.generate_content(prompt)
-            return Response({"response": response.text})
-            
-        except Exception as e:
-            return Response(
-                {"detail": f"Error communicating with AI service: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            except Exception as fallback_error:
+                return Response(
+                    {"detail": f"Error communicating with AI service: {str(fallback_error)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 

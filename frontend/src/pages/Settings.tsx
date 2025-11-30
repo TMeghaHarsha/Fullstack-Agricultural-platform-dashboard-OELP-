@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,57 +46,6 @@ const Settings = () => {
     currency: "usd",
   });
 
-  const [notifications, setNotifications] = useState({
-    email: true,
-    sms: false,
-    push: true,
-    weather: true,
-  });
-  
-  // Load preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const res = await fetch(`${API_URL}/user-preferences/`, { headers: authHeaders() });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.results && data.results.length > 0) {
-            const prefs = data.results[0];
-            setNotifications({
-              email: prefs.email_notifications ?? true,
-              sms: prefs.sms_notifications ?? false,
-              push: prefs.push_notifications ?? true,
-              weather: prefs.weather_alerts ?? true,
-            });
-          }
-        }
-      } catch {}
-    };
-    loadPreferences();
-  }, []);
-  
-  // Save preferences when changed
-  const savePreferences = async (newNotifications: typeof notifications) => {
-    try {
-      const res = await fetch(`${API_URL}/user-preferences/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({
-          email_notifications: newNotifications.email,
-          sms_notifications: newNotifications.sms,
-          push_notifications: newNotifications.push,
-          weather_alerts: newNotifications.weather,
-        }),
-      });
-      if (res.ok) {
-        toast.success("Notification preferences updated");
-      } else {
-        toast.error("Failed to update preferences");
-      }
-    } catch (error) {
-      toast.error("Failed to update preferences");
-    }
-  };
 
   const [deleteAccountDialog, setDeleteAccountDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -325,71 +273,6 @@ const Settings = () => {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Notification Preferences</CardTitle>
-          <CardDescription>Choose how you want to receive notifications</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Email Notifications</Label>
-              <p className="text-sm text-muted-foreground">Receive notifications via email</p>
-            </div>
-            <Switch
-              checked={notifications.email}
-              onCheckedChange={(checked) => {
-                const newNotifications = { ...notifications, email: checked };
-                setNotifications(newNotifications);
-                savePreferences(newNotifications);
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>SMS Notifications</Label>
-              <p className="text-sm text-muted-foreground">Receive notifications via SMS</p>
-            </div>
-            <Switch
-              checked={notifications.sms}
-              onCheckedChange={(checked) => {
-                const newNotifications = { ...notifications, sms: checked };
-                setNotifications(newNotifications);
-                savePreferences(newNotifications);
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Push Notifications</Label>
-              <p className="text-sm text-muted-foreground">Receive push notifications on your device</p>
-            </div>
-            <Switch
-              checked={notifications.push}
-              onCheckedChange={(checked) => {
-                const newNotifications = { ...notifications, push: checked };
-                setNotifications(newNotifications);
-                savePreferences(newNotifications);
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Weather Alerts</Label>
-              <p className="text-sm text-muted-foreground">Get notified about weather conditions</p>
-            </div>
-            <Switch
-              checked={notifications.weather}
-              onCheckedChange={(checked) => {
-                const newNotifications = { ...notifications, weather: checked };
-                setNotifications(newNotifications);
-                savePreferences(newNotifications);
-              }}
-            />
           </div>
         </CardContent>
       </Card>

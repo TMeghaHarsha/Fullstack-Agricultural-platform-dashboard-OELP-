@@ -34,7 +34,6 @@ router.register(r"notification-center", views.NotificationCenterViewSet, basenam
 router.register(r"admin/notifications", views.NotificationCenterViewSet, basename="admin-notifications")
 router.register(r"admin/fields", views.AdminFieldViewSet, basename="admin-fields")
 router.register(r"users", views.UsersReadOnlyViewSet, basename="users-readonly")
-router.register(r"user-preferences", views.UserPreferencesViewSet, basename="user-preferences")
 
 urlpatterns = [
     path("", lambda r: JsonResponse({"status": "ok"})),
