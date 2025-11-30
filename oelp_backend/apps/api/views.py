@@ -2657,7 +2657,8 @@ class AgribotChatView(APIView):
         try:
             import google.generativeai as genai
             genai.configure(api_key=gemini_api_key)
-            model = genai.GenerativeModel('gemini-pro')
+            # Use gemini-1.5-flash (faster and more cost-effective) or gemini-1.5-pro for better quality
+            model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
             
             # Safely extract text from response
@@ -2671,7 +2672,8 @@ class AgribotChatView(APIView):
             # Fallback: use requests to call Gemini API directly
             try:
                 import requests
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={gemini_api_key}"
+                # Use gemini-1.5-flash model (updated from deprecated gemini-pro)
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
                 
                 payload = {
                     "contents": [{
