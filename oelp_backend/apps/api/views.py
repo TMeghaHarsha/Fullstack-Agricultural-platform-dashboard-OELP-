@@ -66,7 +66,7 @@ from apps.models_app.field import Field, Device, CropLifecycleDates, FieldIrriga
 from apps.models_app.feature import Feature, FeatureType
 from apps.models_app.plan import Plan
 from apps.models_app.feature_plan import PlanFeature
-from apps.models_app.user_plan import UserPlan, PaymentMethod, Transaction, RefundPolicy
+from apps.models_app.user_plan import UserPlan, PlanFeatureUsage, PaymentMethod, Transaction, RefundPolicy
 from apps.models_app.notifications import Notification, SupportRequest
 from apps.models_app.support_ticket import SupportTicket, TicketComment, TicketHistory
 from apps.models_app.irrigation import IrrigationMethods
@@ -2056,6 +2056,7 @@ class AgribotView(APIView):
         is_topup = plan_name.lower() == "topupplan" or plan_type == "topup"
         
         # Track usage for top-up plan (6-8 calls per day)
+        usage = None
         if is_topup:
             from datetime import date
             today = date.today()
@@ -2084,11 +2085,15 @@ class AgribotView(APIView):
                             "remaining": 0
                         }, status=status.HTTP_429_TOO_MANY_REQUESTS)
                     
-                    # Increment usage
-                    usage.used_count += 1
-                    usage.save()
+                    # Increment usage (will save after successful API call)
+                except Feature.DoesNotExist:
+                    # Feature doesn't exist, allow but don't track
+                    pass
                 except Exception as e:
                     # If tracking fails, still allow but log
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Error tracking AI usage: {str(e)}")
                     pass
         
         # Validate message is related to farming/agriculture
@@ -2096,7 +2101,9 @@ class AgribotView(APIView):
             "farm", "crop", "field", "soil", "irrigation", "harvest", "sowing", "agriculture",
             "farming", "fertilizer", "pest", "disease", "yield", "acre", "hectare", "agricultural",
             "farmer", "cultivation", "planting", "watering", "weather", "season", "agricultural",
-            "livestock", "cattle", "poultry", "organic", "sustainable", "agri", "agribot"
+            "livestock", "cattle", "poultry", "organic", "sustainable", "agri", "agribot",
+            "cotton", "wheat", "rice", "corn", "maize", "vegetable", "fruit", "grain", "seed",
+            "suitable", "type", "grow", "growing", "plant", "plants", "crops", "farming"
         ]
         
         message_lower = message.lower()
@@ -2154,22 +2161,41 @@ class AgribotView(APIView):
                 data = response.json()
                 ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
                 
+                # Save usage increment after successful API call
+                if usage:
+                    try:
+                        usage.used_count += 1
+                        usage.save()
+                    except Exception:
+                        pass
+                
                 return Response({
                     "response": ai_response,
-                    "remaining": (8 - usage.used_count) if is_topup and 'usage' in locals() else None
+                    "remaining": (usage.max_count - usage.used_count) if usage else None
                 })
             else:
+                try:
+                    error_data = response.json() if response.content else {}
+                    error_msg = error_data.get("error", {}).get("message", "Failed to get response from AI service")
+                except Exception:
+                    error_msg = f"HTTP {response.status_code}: Failed to get response from AI service"
                 return Response({
-                    "detail": "Failed to get response from AI service",
+                    "detail": f"AI service error: {error_msg}",
                     "error": "ai_service_error"
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
                 
         except requests.exceptions.RequestException as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Agribot request error: {str(e)}")
             return Response({
                 "detail": f"Error connecting to AI service: {str(e)}",
                 "error": "connection_error"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Agribot unexpected error: {str(e)}", exc_info=True)
             return Response({
                 "detail": f"Unexpected error: {str(e)}",
                 "error": "unexpected_error"
