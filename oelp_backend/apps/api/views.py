@@ -2657,50 +2657,73 @@ class AgribotChatView(APIView):
         try:
             import google.generativeai as genai
             genai.configure(api_key=gemini_api_key)
-            # Use gemini-1.5-flash (faster and more cost-effective) or gemini-1.5-pro for better quality
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
             
-            # Safely extract text from response
-            if hasattr(response, 'text') and response.text:
-                return Response({"response": response.text})
-            else:
-                # Fallback to requests if response structure is unexpected
-                raise ValueError("Unexpected response format from genai library")
+            # Try different models in order of preference
+            models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+            last_lib_error = None
+            
+            for model_name in models_to_try:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content(prompt)
+                    
+                    # Safely extract text from response
+                    if hasattr(response, 'text') and response.text:
+                        return Response({"response": response.text})
+                    else:
+                        # Try next model if response structure is unexpected
+                        continue
+                except Exception as model_error:
+                    last_lib_error = str(model_error)
+                    continue
+            
+            # If all models failed, raise to trigger REST API fallback
+            raise Exception(f"All library models failed. Last error: {last_lib_error}")
                 
         except (ImportError, Exception) as e:
             # Fallback: use requests to call Gemini API directly
-            try:
-                import requests
-                # Use gemini-1.5-flash model (updated from deprecated gemini-pro)
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
-                
-                payload = {
-                    "contents": [{
-                        "parts": [{"text": prompt}]
-                    }]
-                }
-                
-                response = requests.post(url, json=payload, timeout=30)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Sorry, I could not generate a response.')
-                    return Response({"response": text})
-                else:
-                    error_detail = f"API returned status {response.status_code}"
-                    try:
-                        error_data = response.json()
-                        error_detail = error_data.get('error', {}).get('message', error_detail)
-                    except:
-                        pass
-                    return Response(
-                        {"detail": f"Error communicating with AI service: {error_detail}"},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                    )
-            except Exception as fallback_error:
-                return Response(
-                    {"detail": f"Error communicating with AI service: {str(fallback_error)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+            # Try multiple API versions and models for compatibility
+            import requests
+            
+            payload = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            }
+            
+            # Try different API versions and models in order of preference
+            api_configs = [
+                ("v1", "gemini-1.5-flash"),  # Latest API with flash model
+                ("v1", "gemini-1.5-pro"),    # Latest API with pro model
+                ("v1beta", "gemini-1.5-flash"),  # Beta API with flash
+                ("v1beta", "gemini-1.5-pro"),    # Beta API with pro
+            ]
+            
+            last_error = None
+            for api_version, model_name in api_configs:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={gemini_api_key}"
+                    response = requests.post(url, json=payload, timeout=30)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Sorry, I could not generate a response.')
+                        return Response({"response": text})
+                    else:
+                        # Try next configuration
+                        try:
+                            error_data = response.json()
+                            last_error = error_data.get('error', {}).get('message', f"API returned status {response.status_code}")
+                        except:
+                            last_error = f"API returned status {response.status_code}"
+                        continue
+                except Exception as config_error:
+                    last_error = str(config_error)
+                    continue
+            
+            # If all configurations failed, return the last error
+            return Response(
+                {"detail": f"Error communicating with AI service: {last_error or 'All API configurations failed'}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
