@@ -633,7 +633,11 @@ function SoilAnalysisDialog({ open, onOpenChange, API_URL, fields, authHeaders }
                   <TableCell>{r.ec}</TableCell>
                   <TableCell>{r.soil_type}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" onClick={() => window.open(r.report_link || `${API_URL}/reports/export/pdf/?field_id=${r.field}`, "_blank")}>PDF</Button>
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      const token = localStorage.getItem("token");
+                      const url = `${API_URL}/reports/export/pdf/?field_id=${r.field}${token ? `&token=${token}` : ''}`;
+                      window.open(url, "_blank");
+                    }}>PDF</Button>
                   </TableCell>
                 </TableRow>
               ))}

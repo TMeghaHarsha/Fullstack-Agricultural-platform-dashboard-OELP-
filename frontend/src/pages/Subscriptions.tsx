@@ -103,6 +103,19 @@ const Subscriptions = () => {
   const isFreePlan = (planName: string) => planName.toLowerCase() === "free";
   const hasActivePaidPlan = userPlan && !isFreePlan(userPlan.plan_name) && userPlan.is_active;
   
+  // Check if user has main plan (required for top-up)
+  const hasMainPlan = userPlan && (
+    (userPlan.plan_name || "").toLowerCase() === "mainplan" || 
+    (userPlan.plan_details?.type || "").toLowerCase() === "main"
+  ) && userPlan.is_active;
+  
+  // Check if plan is top-up
+  const isTopUpPlan = (plan: any) => {
+    const planName = (plan?.name || "").toLowerCase();
+    const planType = (plan?.type || "").toLowerCase();
+    return planName === "topupplan" || planType === "topup";
+  };
+  
   const loadRefundInfo = async () => {
     if (!userPlan || !canDowngrade) return;
     try {
@@ -219,25 +232,10 @@ const Subscriptions = () => {
                   <Button className="w-full" disabled>Current Plan</Button>
                 ) : isFreePlan(plan.name) ? (
                   <Button className="w-full" disabled>Free Plan</Button>
+                ) : isTopUpPlan(plan) && !hasMainPlan ? (
+                  <Button className="w-full" disabled title="Top-up plan requires Main plan. Please subscribe to Main plan first.">Requires Main Plan</Button>
                 ) : hasActivePaidPlan ? (
                   <Button className="w-full" disabled title="Cancel current subscription first">Not Available</Button>
-                ) : plan.type === "topup" ? (
-                  (() => {
-                    // Check if user has active main plan
-                    const hasMainPlan = userPlan && userPlan.plan_details && 
-                      (userPlan.plan_details.type === "main" || 
-                       (userPlan.plan_name && userPlan.plan_name.toLowerCase().includes("main")));
-                    return (
-                      <Button 
-                        className="w-full" 
-                        onClick={() => setShowPlanDialog({ open: true, plan })}
-                        disabled={!hasMainPlan}
-                        title={!hasMainPlan ? "Top-up plan requires an active Main plan" : ""}
-                      >
-                        {!hasMainPlan ? "Requires Main Plan" : "View Details"}
-                      </Button>
-                    );
-                  })()
                 ) : (
                   <Button className="w-full" onClick={() => setShowPlanDialog({ open: true, plan })}>
                     View Details

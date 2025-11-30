@@ -54,11 +54,11 @@ urlpatterns = [
     path("reports/export/csv/", views.ExportCSVView.as_view(), name="export-csv"),
     path("reports/export/pdf/", views.ExportPDFView.as_view(), name="export-pdf"),
     path("analytics/summary/", views.AnalyticsSummaryView.as_view(), name="analytics-summary"),
+    path("agribot/", views.AgribotView.as_view(), name="agribot"),
     path("admin/analytics/", views.AdminAnalyticsView.as_view(), name="admin-analytics"),
     path("admin/transactions/refunds-summary/", views.RefundsSummaryView.as_view(), name="refunds-summary"),
     path("auth/ensure-role/", views.EnsureRoleView.as_view(), name="ensure-role"),
     path("me/", views.MeView.as_view(), name="auth-me"),
-    path("agribot/chat/", views.AgribotChatView.as_view(), name="agribot-chat"),
     path("", include(router.urls)),
 ]
 

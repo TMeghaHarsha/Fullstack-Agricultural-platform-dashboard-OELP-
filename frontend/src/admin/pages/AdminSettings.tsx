@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertTriangle } from "lucide-react";
@@ -55,6 +56,12 @@ export default function AdminSettings() {
     currency: "inr",
   });
 
+  const [notifications, setNotifications] = useState({
+    email: true,
+    sms: false,
+    push: true,
+    weather: true,
+  });
 
   const handleUpdateProfile = () => {
     fetch(`${API_URL}/auth/me/`, {
@@ -249,6 +256,55 @@ export default function AdminSettings() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Notification Preferences</CardTitle>
+          <CardDescription>Choose how you want to receive notifications</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Email Notifications</Label>
+              <p className="text-sm text-muted-foreground">Receive notifications via email</p>
+            </div>
+            <Switch
+              checked={notifications.email}
+              onCheckedChange={(checked) => setNotifications({ ...notifications, email: checked })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>SMS Notifications</Label>
+              <p className="text-sm text-muted-foreground">Receive notifications via SMS</p>
+            </div>
+            <Switch
+              checked={notifications.sms}
+              onCheckedChange={(checked) => setNotifications({ ...notifications, sms: checked })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Push Notifications</Label>
+              <p className="text-sm text-muted-foreground">Receive push notifications on your device</p>
+            </div>
+            <Switch
+              checked={notifications.push}
+              onCheckedChange={(checked) => setNotifications({ ...notifications, push: checked })}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Weather Alerts</Label>
+              <p className="text-sm text-muted-foreground">Get notified about weather conditions</p>
+            </div>
+            <Switch
+              checked={notifications.weather}
+              onCheckedChange={(checked) => setNotifications({ ...notifications, weather: checked })}
+            />
           </div>
         </CardContent>
       </Card>

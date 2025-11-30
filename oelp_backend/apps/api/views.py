@@ -4,6 +4,7 @@ import csv
 import io
 import os
 import secrets
+import requests
 from datetime import date, datetime, timedelta
 
 from django.db import IntegrityError
@@ -1019,9 +1020,7 @@ class SoilReportViewSet(viewsets.ModelViewSet):
         report = serializer.save()
         # Set a convenient report link to the PDF export filtered by field
         try:
-            token = UserAuthToken.objects.filter(user=report.field.user).first()
-            token_param = f"&token={token.access_token}" if token else ""
-            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}{token_param}"
+            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
             report.save(update_fields=["report_link"])
         except Exception:
             pass
@@ -1316,26 +1315,27 @@ class UserPlanViewSet(viewsets.ModelViewSet):
             return Response({"results": []})
 
     def perform_create(self, serializer):
-        plan_data = serializer.validated_data.get('plan')
-        if plan_data:
-            # Check if user is trying to purchase top-up plan
-            if plan_data.type == Plan.PlanType.TOPUP:
-                # Top-up plan can only be purchased if user has an active main plan
-                from django.utils import timezone
-                main_plan = Plan.objects.filter(type=Plan.PlanType.MAIN).first()
-                if main_plan:
-                    has_main_plan = UserPlan.objects.filter(
-                        user=self.request.user,
-                        plan=main_plan,
-                        is_active=True,
-                        expire_at__gt=timezone.now()
-                    ).exists()
-                    if not has_main_plan:
-                        from rest_framework.exceptions import ValidationError
-                        raise ValidationError(
-                            "Top-up plan can only be purchased when you have an active Main plan. "
-                            "Please purchase Main plan first."
-                        )
+        plan_data = serializer.validated_data.get("plan")
+        if not plan_data:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Plan is required")
+        
+        # Check if trying to subscribe to top-up plan
+        if plan_data.type == "topup" or (plan_data.name and "topup" in plan_data.name.lower()):
+            # Check if user has an active main plan
+            has_main_plan = UserPlan.objects.filter(
+                user=self.request.user,
+                is_active=True,
+                expire_at__gt=timezone.now()
+            ).filter(
+                Q(plan__type="main") | Q(plan__name__icontains="MainPlan")
+            ).exists()
+            
+            if not has_main_plan:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    "Top-up plan requires an active Main plan. Please subscribe to Main plan first."
+                )
         
         # Check if user has an active paid subscription
         active_paid = UserPlan.objects.filter(
@@ -1944,16 +1944,16 @@ class ExportPDFView(APIView):
                     resolved_user = tok.user
         except Exception:
             resolved_user = None
-        
         if resolved_user is None:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         
-        # Minimal PDF export with optional date filter and field_id
+        # Minimal PDF export (same as earlier behavior). If reportlab is missing, return 501.
         try:
             from reportlab.pdfgen import canvas
         except Exception:
             return Response({"detail": "PDF export not available (reportlab missing)"}, status=status.HTTP_501_NOT_IMPLEMENTED)
 
+        # Optional date filters and field filter
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         field_id = request.query_params.get("field_id") or request.query_params.get("field")
@@ -1969,39 +1969,256 @@ class ExportPDFView(APIView):
 
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer)
-        p.drawString(100, 800, "OELP Soil Analysis Report")
+        p.drawString(100, 800, "OELP Report")
         y = 760
         
-        # Get soil reports for the user
-        queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
+        queryset = Field.objects.filter(user=resolved_user)
         if field_id:
-            queryset = queryset.filter(field_id=field_id)
+            queryset = queryset.filter(pk=field_id)
         if start_date:
-            queryset = queryset.filter(created_at__date__gte=start_date)
+            queryset = queryset.filter(updated_at__date__gte=start_date)
         if end_date:
-            queryset = queryset.filter(created_at__date__lte=end_date)
+            queryset = queryset.filter(updated_at__date__lte=end_date)
         
-        soil_reports = queryset[:30]
-        if soil_reports:
-            p.drawString(100, y, "Soil Analysis Reports:")
-            y -= 30
-            for report in soil_reports:
-                if y < 50:
-                    p.showPage()
-                    y = 800
-                p.drawString(120, y, f"Field: {report.field.name}")
-                y -= 20
-                p.drawString(120, y, f"pH: {report.ph}, EC: {report.ec}, Soil Type: {report.soil_type.name}")
-                y -= 30
-        else:
-            p.drawString(100, y, "No soil reports found.")
+        for fld in queryset[:30]:
+            p.drawString(100, y, f"Field: {fld.name}")
+            y -= 20
+            if y < 50:
+                p.showPage()
+                y = 800
         
         p.showPage()
         p.save()
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = "attachment; filename=soil_report.pdf"
+        response["Content-Disposition"] = "attachment; filename=report.pdf"
         return response
+
+def get_user_subscription_features(user):
+    """Helper function to get user's active subscription features"""
+    from django.utils import timezone
+    from django.db.models import Q
+    
+    # Get active user plan
+    active_plan = UserPlan.objects.filter(
+        user=user,
+        is_active=True,
+        expire_at__gt=timezone.now()
+    ).select_related("plan").order_by("-created_at").first()
+    
+    if not active_plan:
+        return {"plan_name": "Free", "features": ["Basic Reports"], "plan_type": "free"}
+    
+    plan = active_plan.plan
+    features = []
+    try:
+        for pf in plan.plan_features.select_related("feature").all():
+            features.append(pf.feature.name)
+    except Exception:
+        pass
+    
+    return {
+        "plan_name": plan.name,
+        "features": features,
+        "plan_type": plan.type,
+        "user_plan": active_plan
+    }
+
+
+class AgribotView(APIView):
+    authentication_classes = [TokenAuthentication]
+    
+    def post(self, request):
+        """Handle Agribot chat requests with OpenAI"""
+        user = request.user
+        message = request.data.get("message", "").strip()
+        
+        if not message:
+            return Response({"detail": "Message is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check user's subscription
+        sub_info = get_user_subscription_features(user)
+        plan_name = sub_info.get("plan_name", "Free")
+        plan_type = sub_info.get("plan_type", "free")
+        features = sub_info.get("features", [])
+        
+        # Check if user has AI Assistant feature
+        has_ai_assistant = "AI Assistant" in features
+        
+        if not has_ai_assistant:
+            return Response({
+                "detail": "AI Assistant is only available with TopUp or Enterprise plans. Please upgrade your subscription.",
+                "error": "feature_not_available"
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if it's top-up plan (limited calls) or enterprise (unlimited)
+        is_enterprise = plan_name.lower() == "enterpriseplan" or plan_type == "enterprise"
+        is_topup = plan_name.lower() == "topupplan" or plan_type == "topup"
+        
+        # Track usage for top-up plan (6-8 calls per day)
+        if is_topup:
+            from datetime import date
+            today = date.today()
+            user_plan = sub_info.get("user_plan")
+            
+            if user_plan:
+                # Get or create feature usage tracking
+                try:
+                    ai_feature = Feature.objects.get(name="AI Assistant")
+                    usage, created = PlanFeatureUsage.objects.get_or_create(
+                        user_plan=user_plan,
+                        feature=ai_feature,
+                        defaults={"max_count": 8, "used_count": 0, "duration_days": 1}
+                    )
+                    
+                    # Reset daily count if it's a new day (simplified - check if created today)
+                    if created or usage.updated_at.date() < today:
+                        usage.used_count = 0
+                        usage.save()
+                    
+                    # Check if limit exceeded
+                    if usage.used_count >= usage.max_count:
+                        return Response({
+                            "detail": f"You have reached your daily limit of {usage.max_count} AI prompts. Please try again tomorrow or upgrade to Enterprise for unlimited access.",
+                            "error": "limit_exceeded",
+                            "remaining": 0
+                        }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+                    
+                    # Increment usage
+                    usage.used_count += 1
+                    usage.save()
+                except Exception as e:
+                    # If tracking fails, still allow but log
+                    pass
+        
+        # Validate message is related to farming/agriculture
+        farming_keywords = [
+            "farm", "crop", "field", "soil", "irrigation", "harvest", "sowing", "agriculture",
+            "farming", "fertilizer", "pest", "disease", "yield", "acre", "hectare", "agricultural",
+            "farmer", "cultivation", "planting", "watering", "weather", "season", "agricultural",
+            "livestock", "cattle", "poultry", "organic", "sustainable", "agri", "agribot"
+        ]
+        
+        message_lower = message.lower()
+        is_farming_related = any(keyword in message_lower for keyword in farming_keywords)
+        
+        if not is_farming_related:
+            return Response({
+                "response": "I'm Agribot, your agricultural assistant. Please ask me questions related to farming, agriculture, crops, soil management, irrigation, or anything related to this agricultural platform.",
+                "error": "off_topic"
+            }, status=status.HTTP_200_OK)
+        
+        # Call OpenAI API
+        try:
+            import os
+            openai_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
+            
+            if not openai_api_key:
+                return Response({
+                    "detail": "OpenAI API key not configured. Please contact support.",
+                    "error": "config_error"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Prepare prompt with context
+            system_prompt = """You are Agribot, an AI assistant specialized in agriculture and farming. 
+            You help farmers with:
+            - Crop management and best practices
+            - Soil analysis and recommendations
+            - Irrigation scheduling and methods
+            - Pest and disease identification
+            - Harvest planning
+            - Agricultural best practices
+            - General farming questions
+            
+            Keep responses concise, practical, and focused on agriculture. If asked about non-agricultural topics, politely redirect to farming-related questions."""
+            
+            response = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {openai_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-3.5-turbo",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": message}
+                    ],
+                    "max_tokens": 500,
+                    "temperature": 0.7
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
+                
+                return Response({
+                    "response": ai_response,
+                    "remaining": (8 - usage.used_count) if is_topup and 'usage' in locals() else None
+                })
+            else:
+                return Response({
+                    "detail": "Failed to get response from AI service",
+                    "error": "ai_service_error"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except requests.exceptions.RequestException as e:
+            return Response({
+                "detail": f"Error connecting to AI service: {str(e)}",
+                "error": "connection_error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({
+                "detail": f"Unexpected error: {str(e)}",
+                "error": "unexpected_error"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def get(self, request):
+        """Get user's AI usage status"""
+        user = request.user
+        sub_info = get_user_subscription_features(user)
+        plan_name = sub_info.get("plan_name", "Free")
+        plan_type = sub_info.get("plan_type", "free")
+        features = sub_info.get("features", [])
+        
+        has_ai_assistant = "AI Assistant" in features
+        is_enterprise = plan_name.lower() == "enterpriseplan" or plan_type == "enterprise"
+        is_topup = plan_name.lower() == "topupplan" or plan_type == "topup"
+        
+        usage_info = {
+            "has_ai_assistant": has_ai_assistant,
+            "plan_name": plan_name,
+            "is_unlimited": is_enterprise,
+            "remaining": None
+        }
+        
+        if is_topup and has_ai_assistant:
+            user_plan = sub_info.get("user_plan")
+            if user_plan:
+                try:
+                    from datetime import date
+                    today = date.today()
+                    ai_feature = Feature.objects.get(name="AI Assistant")
+                    usage = PlanFeatureUsage.objects.filter(
+                        user_plan=user_plan,
+                        feature=ai_feature
+                    ).first()
+                    
+                    if usage:
+                        # Reset if new day
+                        if usage.updated_at.date() < today:
+                            usage.used_count = 0
+                            usage.save()
+                        
+                        usage_info["remaining"] = max(0, usage.max_count - usage.used_count)
+                        usage_info["daily_limit"] = usage.max_count
+                except Exception:
+                    pass
+        
+        return Response(usage_info)
+
 
 class AnalyticsSummaryView(APIView):
     authentication_classes = [TokenAuthentication]
@@ -2582,148 +2799,4 @@ def me_view(request):
             'phone_number': user.phone_number,
             'avatar': user.avatar,
         })
-
-
-class AgribotChatView(APIView):
-    authentication_classes = [TokenAuthentication]
-    
-    def post(self, request):
-        user = request.user
-        message = request.data.get('message', '')
-        
-        if not message:
-            return Response({"detail": "Message is required"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check user's plan for AI assistant access
-        from django.utils import timezone
-        user_plan = UserPlan.objects.filter(
-            user=user,
-            is_active=True,
-            expire_at__gt=timezone.now()
-        ).select_related('plan').order_by('-created_at').first()
-        
-        plan_name = user_plan.plan.name.lower() if user_plan and user_plan.plan else "free"
-        has_ai_access = "topup" in plan_name or "enterprise" in plan_name
-        
-        if not has_ai_access:
-            return Response(
-                {"detail": "AI Assistant is only available with TopUp or Enterprise plans"},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Check daily usage limit for topup plan (6-8 calls per day)
-        if "topup" in plan_name:
-            from datetime import date
-            today = date.today()
-            # Track usage - in production, use a proper model
-            # For now, we'll allow it but note that proper tracking should be implemented
-            
-        # Check if message is website-related
-        website_keywords = ['field', 'crop', 'irrigation', 'soil', 'farm', 'report', 'analytics', 
-                           'subscription', 'plan', 'notification', 'settings', 'dashboard', 'agri']
-        message_lower = message.lower()
-        is_website_related = any(keyword in message_lower for keyword in website_keywords)
-        
-        if not is_website_related:
-            return Response({
-                "response": "Please ask about the website, such as questions about fields, crops, irrigation, soil analysis, reports, analytics, subscriptions, or other website features."
-            })
-        
-        # Use Gemini API
-        import os
-        gemini_api_key = os.getenv('GEMINI_API_KEY')
-        if not gemini_api_key:
-            return Response(
-                {"detail": "AI service not configured. Please set GEMINI_API_KEY environment variable."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
-        
-        # Create a context-aware prompt
-        prompt = f"""You are Agribot, an AI assistant for an agricultural platform. 
-        Answer questions about the website features including:
-        - Field management
-        - Crop management
-        - Irrigation practices
-        - Soil analysis
-        - Reports and analytics
-        - Subscriptions and plans
-        - Settings
-        
-        User question: {message}
-        
-        Provide a helpful, concise answer focused on the website features."""
-        
-        # Try to use google.generativeai library first
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_api_key)
-            
-            # Try different models in order of preference
-            models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
-            last_lib_error = None
-            
-            for model_name in models_to_try:
-                try:
-                    model = genai.GenerativeModel(model_name)
-                    response = model.generate_content(prompt)
-                    
-                    # Safely extract text from response
-                    if hasattr(response, 'text') and response.text:
-                        return Response({"response": response.text})
-                    else:
-                        # Try next model if response structure is unexpected
-                        continue
-                except Exception as model_error:
-                    last_lib_error = str(model_error)
-                    continue
-            
-            # If all models failed, raise to trigger REST API fallback
-            raise Exception(f"All library models failed. Last error: {last_lib_error}")
-                
-        except (ImportError, Exception) as e:
-            # Fallback: use requests to call Gemini API directly
-            # Try multiple API versions and models for compatibility
-            import requests
-            
-            payload = {
-                "contents": [{
-                    "parts": [{"text": prompt}]
-                }]
-            }
-            
-            # Try different API versions and models in order of preference
-            api_configs = [
-                ("v1", "gemini-1.5-flash"),  # Latest API with flash model
-                ("v1", "gemini-1.5-pro"),    # Latest API with pro model
-                ("v1beta", "gemini-1.5-flash"),  # Beta API with flash
-                ("v1beta", "gemini-1.5-pro"),    # Beta API with pro
-            ]
-            
-            last_error = None
-            for api_version, model_name in api_configs:
-                try:
-                    url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={gemini_api_key}"
-                    response = requests.post(url, json=payload, timeout=30)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Sorry, I could not generate a response.')
-                        return Response({"response": text})
-                    else:
-                        # Try next configuration
-                        try:
-                            error_data = response.json()
-                            last_error = error_data.get('error', {}).get('message', f"API returned status {response.status_code}")
-                        except:
-                            last_error = f"API returned status {response.status_code}"
-                        continue
-                except Exception as config_error:
-                    last_error = str(config_error)
-                    continue
-            
-            # If all configurations failed, return the last error
-            return Response(
-                {"detail": f"Error communicating with AI service: {last_error or 'All API configurations failed'}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 

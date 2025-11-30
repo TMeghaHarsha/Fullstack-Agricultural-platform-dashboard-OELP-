@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
-import { User, Shield, MessageSquare } from "lucide-react";
+import { User, Shield } from "lucide-react";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -35,6 +35,7 @@ import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toast } from "sonner";
 import { NotificationBell } from "@/shared/components/NotificationBell";
+import Agribot from "./Agribot";
 
 interface LayoutProps {
   children: ReactNode;
@@ -52,11 +53,6 @@ export function Layout({ children }: LayoutProps) {
     description: "",
   });
   const [me, setMe] = useState<{ full_name?: string; email?: string; roles?: string[] } | null>(null);
-  const [showAgribot, setShowAgribot] = useState(false);
-  const [agribotMessages, setAgribotMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
-  const [agribotInput, setAgribotInput] = useState("");
-  const [agribotLoading, setAgribotLoading] = useState(false);
-  const [userPlan, setUserPlan] = useState<any | null>(null);
 
   const API_URL =
     (import.meta as any).env.VITE_API_URL ||
@@ -70,53 +66,7 @@ export function Layout({ children }: LayoutProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMe(d))
       .catch(() => {});
-    
-    // Load user plan to check AI access
-    fetch(`${API_URL}/subscriptions/user/`, { headers: { Authorization: `Token ${token}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (d?.results && d.results.length > 0) {
-          setUserPlan(d.results[0]);
-        }
-      })
-      .catch(() => {});
   }, [API_URL]);
-  
-  const hasAgribotAccess = userPlan && userPlan.plan_name && 
-    (userPlan.plan_name.toLowerCase().includes("topup") || 
-     userPlan.plan_name.toLowerCase().includes("enterprise"));
-  
-  const sendAgribotMessage = async () => {
-    if (!agribotInput.trim() || agribotLoading) return;
-    
-    const userMessage = agribotInput.trim();
-    setAgribotInput("");
-    setAgribotMessages(prev => [...prev, { role: 'user', content: userMessage }]);
-    setAgribotLoading(true);
-    
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/agribot/chat/`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Token ${token}` } : {})
-        },
-        body: JSON.stringify({ message: userMessage }),
-      });
-      
-      const data = await res.json();
-      if (res.ok) {
-        setAgribotMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
-      } else {
-        setAgribotMessages(prev => [...prev, { role: 'assistant', content: data.detail || "Error: Could not get response" }]);
-      }
-    } catch (error) {
-      setAgribotMessages(prev => [...prev, { role: 'assistant', content: "Error: Could not connect to Agribot" }]);
-    } finally {
-      setAgribotLoading(false);
-    }
-  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -165,16 +115,6 @@ export function Layout({ children }: LayoutProps) {
             <SidebarTrigger className="text-primary" />
             <div className="flex items-center gap-4">
               <NotificationBell />
-              {hasAgribotAccess && (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowAgribot(true)}
-                  title="Chat with Agribot"
-                >
-                  <MessageSquare className="h-5 w-5" />
-                </Button>
-              )}
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -366,61 +306,13 @@ export function Layout({ children }: LayoutProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Agribot Chat Dialog */}
-      <Dialog open={showAgribot} onOpenChange={setShowAgribot}>
-        <DialogContent className="max-w-2xl h-[600px] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Agribot - AI Assistant</DialogTitle>
-            <DialogDescription>
-              Ask questions about the website features, fields, crops, irrigation, and more.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4 border rounded-lg p-4">
-            {agribotMessages.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center">
-                Start a conversation with Agribot. Ask about website features, fields, crops, irrigation, soil analysis, reports, analytics, subscriptions, or settings.
-              </p>
-            ) : (
-              agribotMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg p-3 ${
-                      msg.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    <p className="text-sm">{msg.content}</p>
-                  </div>
-                </div>
-              ))
-            )}
-            {agribotLoading && (
-              <div className="flex justify-start">
-                <div className="bg-muted rounded-lg p-3">
-                  <p className="text-sm">Thinking...</p>
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={agribotInput}
-              onChange={(e) => setAgribotInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && sendAgribotMessage()}
-              placeholder="Type your message..."
-              disabled={agribotLoading}
-            />
-            <Button onClick={sendAgribotMessage} disabled={agribotLoading || !agribotInput.trim()}>
-              Send
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
+      <Agribot 
+        API_URL={API_URL} 
+        authHeaders={() => {
+          const token = localStorage.getItem("token");
+          return token ? { Authorization: `Token ${token}` } : {};
+        }} 
+      />
     </SidebarProvider>
   );
 }
