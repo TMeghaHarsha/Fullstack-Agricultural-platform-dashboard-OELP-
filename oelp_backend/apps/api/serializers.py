@@ -23,6 +23,7 @@ from apps.models_app.user_plan import (
     PaymentMethod,
     Transaction,
 )
+from apps.models_app.user_preferences import UserPreferences
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -412,11 +413,27 @@ class NotificationSerializer(serializers.ModelSerializer):
         if not user:
             return None
         try:
-            return (
+            # Get all roles for the user
+            all_roles = list(
                 user.user_roles.select_related("role")
                 .values_list("role__name", flat=True)
-                .first()
             )
+            if not all_roles:
+                return None
+            
+            # Prioritize non-end-user roles (for sender, we want their primary role)
+            # Filter out End-App-User and similar variants
+            non_end_user_roles = [
+                r for r in all_roles
+                if r and r.lower().replace("-", "").replace("_", "").replace(" ", "") not in ["endappuser", "enduser", "endusers"]
+            ]
+            
+            # If there are non-end-user roles, return the first one
+            if non_end_user_roles:
+                return non_end_user_roles[0]
+            
+            # Otherwise, return the first role (which might be End-App-User)
+            return all_roles[0]
         except Exception:
             return None
 
@@ -597,3 +614,17 @@ class SupportTicketCreateSerializer(serializers.ModelSerializer):
         validated_data["created_by"] = self.context["request"].user
         return super().create(validated_data)
 
+
+class UserPreferencesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserPreferences
+        fields = (
+            "id",
+            "email_notifications",
+            "sms_notifications",
+            "push_notifications",
+            "weather_alerts",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")

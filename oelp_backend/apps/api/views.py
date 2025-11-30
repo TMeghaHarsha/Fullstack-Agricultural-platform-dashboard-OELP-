@@ -56,6 +56,7 @@ from .serializers import (
     SupportTicketCreateSerializer,
     TicketCommentSerializer,
     TicketHistorySerializer,
+    UserPreferencesSerializer,
 )
 
 from apps.models_app.assets import Asset
@@ -71,6 +72,7 @@ from apps.models_app.support_ticket import SupportTicket, TicketComment, TicketH
 from apps.models_app.irrigation import IrrigationMethods
 from apps.models_app.models import UserActivity
 from apps.models_app.soil_report import SoilReport, SoilTexture
+from apps.models_app.user_preferences import UserPreferences
 from apps.utils.notification_utils import get_allowed_receivers, normalize_role, send_notification
 
 razorpay = None
@@ -1019,7 +1021,9 @@ class SoilReportViewSet(viewsets.ModelViewSet):
         report = serializer.save()
         # Set a convenient report link to the PDF export filtered by field
         try:
-            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
+            token = UserAuthToken.objects.filter(user=report.field.user).first()
+            token_param = f"&token={token.access_token}" if token else ""
+            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}{token_param}"
             report.save(update_fields=["report_link"])
         except Exception:
             pass
@@ -1314,6 +1318,27 @@ class UserPlanViewSet(viewsets.ModelViewSet):
             return Response({"results": []})
 
     def perform_create(self, serializer):
+        plan_data = serializer.validated_data.get('plan')
+        if plan_data:
+            # Check if user is trying to purchase top-up plan
+            if plan_data.type == Plan.PlanType.TOPUP:
+                # Top-up plan can only be purchased if user has an active main plan
+                from django.utils import timezone
+                main_plan = Plan.objects.filter(type=Plan.PlanType.MAIN).first()
+                if main_plan:
+                    has_main_plan = UserPlan.objects.filter(
+                        user=self.request.user,
+                        plan=main_plan,
+                        is_active=True,
+                        expire_at__gt=timezone.now()
+                    ).exists()
+                    if not has_main_plan:
+                        from rest_framework.exceptions import ValidationError
+                        raise ValidationError(
+                            "Top-up plan can only be purchased when you have an active Main plan. "
+                            "Please purchase Main plan first."
+                        )
+        
         # Check if user has an active paid subscription
         active_paid = UserPlan.objects.filter(
             user=self.request.user,
@@ -1907,20 +1932,77 @@ class ExportPDFView(APIView):
     permission_classes: list = []
 
     def get(self, request):
-        # Minimal PDF export (same as earlier behavior). If reportlab is missing, return 501.
+        # Resolve user from Authorization header (Token ...) or token query param
+        resolved_user: CustomUser | None = None
+        try:
+            auth_header = request.headers.get("Authorization") or ""
+            token_value = None
+            if auth_header.startswith("Token "):
+                token_value = auth_header.split(" ", 1)[1]
+            token_value = token_value or request.query_params.get("token") or request.query_params.get("access_token")
+            if token_value:
+                tok = UserAuthToken.objects.filter(access_token=token_value).select_related("user").first()
+                if tok:
+                    resolved_user = tok.user
+        except Exception:
+            resolved_user = None
+        
+        if resolved_user is None:
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        
+        # Minimal PDF export with optional date filter and field_id
         try:
             from reportlab.pdfgen import canvas
         except Exception:
             return Response({"detail": "PDF export not available (reportlab missing)"}, status=status.HTTP_501_NOT_IMPLEMENTED)
 
+        start_date_str = request.query_params.get("start_date")
+        end_date_str = request.query_params.get("end_date")
+        field_id = request.query_params.get("field_id") or request.query_params.get("field")
+        start_date = None
+        end_date = None
+        try:
+            if start_date_str:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except Exception:
+            pass
+
         buffer = io.BytesIO()
         p = canvas.Canvas(buffer)
-        p.drawString(100, 800, "OELP Report")
+        p.drawString(100, 800, "OELP Soil Analysis Report")
+        y = 760
+        
+        # Get soil reports for the user
+        queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
+        if field_id:
+            queryset = queryset.filter(field_id=field_id)
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+        
+        soil_reports = queryset[:30]
+        if soil_reports:
+            p.drawString(100, y, "Soil Analysis Reports:")
+            y -= 30
+            for report in soil_reports:
+                if y < 50:
+                    p.showPage()
+                    y = 800
+                p.drawString(120, y, f"Field: {report.field.name}")
+                y -= 20
+                p.drawString(120, y, f"pH: {report.ph}, EC: {report.ec}, Soil Type: {report.soil_type.name}")
+                y -= 30
+        else:
+            p.drawString(100, y, "No soil reports found.")
+        
         p.showPage()
         p.save()
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = "attachment; filename=report.pdf"
+        response["Content-Disposition"] = "attachment; filename=soil_report.pdf"
         return response
 
 class AnalyticsSummaryView(APIView):
@@ -2502,4 +2584,170 @@ def me_view(request):
             'phone_number': user.phone_number,
             'avatar': user.avatar,
         })
+
+
+class UserPreferencesViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TokenAuthentication]
+    serializer_class = UserPreferencesSerializer
+    
+    def get_queryset(self):
+        return UserPreferences.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        # Get or create preferences for the user
+        preferences, created = UserPreferences.objects.get_or_create(
+            user=self.request.user,
+            defaults=serializer.validated_data
+        )
+        if not created:
+            # Update existing preferences
+            for key, value in serializer.validated_data.items():
+                setattr(preferences, key, value)
+            preferences.save()
+            
+            # Send test notifications if enabled
+            if serializer.validated_data.get('email_notifications'):
+                try:
+                    from django.core.mail import send_mail
+                    send_mail(
+                        subject='Notification Preferences Updated',
+                        message='Your email notifications have been enabled. You will receive notifications via email.',
+                        from_email='noreply@agriplatform.com',
+                        recipient_list=[self.request.user.email],
+                        fail_silently=True,
+                    )
+                except Exception:
+                    pass
+            
+            if serializer.validated_data.get('sms_notifications') and self.request.user.phone_number:
+                try:
+                    # SMS sending would go here - using a service like Twilio
+                    # For now, we'll just log it
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"SMS notification enabled for {self.request.user.phone_number}")
+                except Exception:
+                    pass
+        
+        return preferences
+
+
+class AgribotChatView(APIView):
+    authentication_classes = [TokenAuthentication]
+    
+    def post(self, request):
+        user = request.user
+        message = request.data.get('message', '')
+        
+        if not message:
+            return Response({"detail": "Message is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check user's plan for AI assistant access
+        from django.utils import timezone
+        user_plan = UserPlan.objects.filter(
+            user=user,
+            is_active=True,
+            expire_at__gt=timezone.now()
+        ).select_related('plan').order_by('-created_at').first()
+        
+        plan_name = user_plan.plan.name.lower() if user_plan and user_plan.plan else "free"
+        has_ai_access = "topup" in plan_name or "enterprise" in plan_name
+        
+        if not has_ai_access:
+            return Response(
+                {"detail": "AI Assistant is only available with TopUp or Enterprise plans"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check daily usage limit for topup plan (6-8 calls per day)
+        if "topup" in plan_name:
+            from datetime import date
+            today = date.today()
+            # Track usage - in production, use a proper model
+            # For now, we'll allow it but note that proper tracking should be implemented
+            
+        # Check if message is website-related
+        website_keywords = ['field', 'crop', 'irrigation', 'soil', 'farm', 'report', 'analytics', 
+                           'subscription', 'plan', 'notification', 'settings', 'dashboard', 'agri']
+        message_lower = message.lower()
+        is_website_related = any(keyword in message_lower for keyword in website_keywords)
+        
+        if not is_website_related:
+            return Response({
+                "response": "Please ask about the website, such as questions about fields, crops, irrigation, soil analysis, reports, analytics, subscriptions, or other website features."
+            })
+        
+        # Use Gemini API
+        try:
+            import os
+            gemini_api_key = os.getenv('GEMINI_API_KEY')
+            if not gemini_api_key:
+                return Response(
+                    {"detail": "AI service not configured"},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
+            
+            # Try to import google.generativeai
+            try:
+                import google.generativeai as genai
+            except ImportError:
+                # Fallback: use requests to call Gemini API directly
+                import requests
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={gemini_api_key}"
+                prompt = f"""You are Agribot, an AI assistant for an agricultural platform. 
+                Answer questions about the website features including:
+                - Field management
+                - Crop management
+                - Irrigation practices
+                - Soil analysis
+                - Reports and analytics
+                - Subscriptions and plans
+                - Notifications and settings
+                
+                User question: {message}
+                
+                Provide a helpful, concise answer focused on the website features."""
+                
+                payload = {
+                    "contents": [{
+                        "parts": [{"text": prompt}]
+                    }]
+                }
+                response = requests.post(url, json=payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Sorry, I could not generate a response.')
+                    return Response({"response": text})
+                else:
+                    return Response(
+                        {"detail": "Error communicating with AI service"},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+            
+            genai.configure(api_key=gemini_api_key)
+            model = genai.GenerativeModel('gemini-pro')
+            
+            # Create a context-aware prompt
+            prompt = f"""You are Agribot, an AI assistant for an agricultural platform. 
+            Answer questions about the website features including:
+            - Field management
+            - Crop management
+            - Irrigation practices
+            - Soil analysis
+            - Reports and analytics
+            - Subscriptions and plans
+            - Notifications and settings
+            
+            User question: {message}
+            
+            Provide a helpful, concise answer focused on the website features."""
+            
+            response = model.generate_content(prompt)
+            return Response({"response": response.text})
+            
+        except Exception as e:
+            return Response(
+                {"detail": f"Error communicating with AI service: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

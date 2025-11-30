@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 
 from apps.models_app.field import Field
 
@@ -64,7 +64,42 @@ def get_users_by_roles(
     region: Optional[str] = None,
     crop_type: Optional[str] = None,
 ) -> List[User]:
-    qs = User.objects.filter(is_active=True, user_roles__role__name__in=roles).distinct()
+    """
+    Get users by roles. Special handling for End-App-User:
+    - If sending to "End-App-User", only include users who have End-App-User as their ONLY role
+    - This prevents notifications intended for end-users from going to Business/Admin/etc users
+    - For other roles, include all users who have that role (even if they have multiple roles)
+    """
+    # Check if we're targeting End-App-User
+    normalized_roles = [normalize_role(r) for r in roles]
+    is_targeting_end_users = any(
+        r and r.lower().replace("-", "").replace("_", "").replace(" ", "") in ["endappuser", "enduser", "endusers"]
+        for r in normalized_roles
+    )
+    
+    if is_targeting_end_users:
+        # When targeting End-App-User, only get users who have End-App-User as their ONLY role
+        # This excludes users who have both End-App-User and other roles (like Business, Admin, etc.)
+        end_user_role_name = "End-App-User"
+        # Get all non-end-user role names to exclude
+        non_end_user_roles = ["SuperAdmin", "Admin", "Business", "Support", "Agronomist", "Analyst", "Developer"]
+        
+        # Get users who have End-App-User role
+        users_with_end_user_role = User.objects.filter(
+            is_active=True, 
+            user_roles__role__name=end_user_role_name
+        ).distinct()
+        
+        # Exclude users who also have any non-end-user role
+        users_with_other_roles = User.objects.filter(
+            is_active=True,
+            user_roles__role__name__in=non_end_user_roles
+        ).values_list("id", flat=True)
+        
+        qs = users_with_end_user_role.exclude(id__in=users_with_other_roles)
+    else:
+        # For other roles, get all users who have any of the specified roles
+        qs = User.objects.filter(is_active=True, user_roles__role__name__in=normalized_roles).distinct()
 
     if region:
         region_user_ids = Field.objects.filter(
@@ -79,7 +114,7 @@ def get_users_by_roles(
         ).values_list("user_id", flat=True)
         qs = qs.filter(id__in=crop_user_ids)
 
-    return qs.distinct()
+    return list(qs.distinct())
 
 
 def send_notification(

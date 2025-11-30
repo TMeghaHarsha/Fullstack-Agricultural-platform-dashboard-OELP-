@@ -221,6 +221,23 @@ const Subscriptions = () => {
                   <Button className="w-full" disabled>Free Plan</Button>
                 ) : hasActivePaidPlan ? (
                   <Button className="w-full" disabled title="Cancel current subscription first">Not Available</Button>
+                ) : plan.type === "topup" ? (
+                  (() => {
+                    // Check if user has active main plan
+                    const hasMainPlan = userPlan && userPlan.plan_details && 
+                      (userPlan.plan_details.type === "main" || 
+                       (userPlan.plan_name && userPlan.plan_name.toLowerCase().includes("main")));
+                    return (
+                      <Button 
+                        className="w-full" 
+                        onClick={() => setShowPlanDialog({ open: true, plan })}
+                        disabled={!hasMainPlan}
+                        title={!hasMainPlan ? "Top-up plan requires an active Main plan" : ""}
+                      >
+                        {!hasMainPlan ? "Requires Main Plan" : "View Details"}
+                      </Button>
+                    );
+                  })()
                 ) : (
                   <Button className="w-full" onClick={() => setShowPlanDialog({ open: true, plan })}>
                     View Details

@@ -34,6 +34,7 @@ router.register(r"notification-center", views.NotificationCenterViewSet, basenam
 router.register(r"admin/notifications", views.NotificationCenterViewSet, basename="admin-notifications")
 router.register(r"admin/fields", views.AdminFieldViewSet, basename="admin-fields")
 router.register(r"users", views.UsersReadOnlyViewSet, basename="users-readonly")
+router.register(r"user-preferences", views.UserPreferencesViewSet, basename="user-preferences")
 
 urlpatterns = [
     path("", lambda r: JsonResponse({"status": "ok"})),
@@ -58,6 +59,7 @@ urlpatterns = [
     path("admin/transactions/refunds-summary/", views.RefundsSummaryView.as_view(), name="refunds-summary"),
     path("auth/ensure-role/", views.EnsureRoleView.as_view(), name="ensure-role"),
     path("me/", views.MeView.as_view(), name="auth-me"),
+    path("agribot/chat/", views.AgribotChatView.as_view(), name="agribot-chat"),
     path("", include(router.urls)),
 ]
 
