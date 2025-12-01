@@ -190,11 +190,11 @@ export default function AdminSubscriptions() {
               subscriptions.slice(0, 5).map((sub) => (
                 <div key={sub.id} className="flex justify-between items-center p-3 border rounded-lg">
                   <div>
-                    <p className="font-medium">{sub.user?.full_name || sub.user?.username || sub.user?.email || 'Unknown User'}</p>
-                    <p className="text-sm text-muted-foreground">{sub.plan?.name || sub.plan_name || 'No Plan'}</p>
+                    <p className="font-medium">{sub.user_name || sub.user?.full_name || sub.user?.username || sub.user?.email || 'Unknown User'}</p>
+                    <p className="text-sm text-muted-foreground">{sub.plan_name || sub.plan?.name || 'No Plan'}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">₹{Number(sub.plan?.price || sub.plan_price || 0).toLocaleString()}</p>
+                    <p className="text-sm font-medium">₹{Number(sub.plan_price || sub.plan?.price || sub.plan_details?.price || 0).toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">{(sub.created_at || sub.start_date || '').slice(0, 10) || 'N/A'}</p>
                   </div>
                 </div>

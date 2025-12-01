@@ -393,7 +393,11 @@ export default function AdminUsers() {
                     if (roleFilter === 'ADMINS' && !isAdminRole) return false;
                   }
                   if (isSuper) {
-                    return r.length === 0 || r.some(x => ['Admin','SuperAdmin','End-App-User'].includes(x));
+                    // SuperAdmin sees: Admins, SuperAdmins, and End-Users (but not employees)
+                    const isAdminRole = r.includes('Admin') || r.includes('SuperAdmin');
+                    const isEndUser = r.length === 0 || r.every(x => x === 'End-App-User');
+                    const isEmployee = r.some(x => ['Analyst','Agronomist','Support','Business','Developer'].includes(x));
+                    return (isAdminRole || isEndUser) && !isEmployee;
                   }
                   if (isAdmin) {
                     const createdByMe = u.created_by_id && me?.id && Number(u.created_by_id) === Number(me.id);

@@ -29,7 +29,12 @@ export default function AdminAnalytics() {
         // Fetch admin analytics with date filters
         const adminRes = await fetch(`${API_URL}/admin/analytics/${urlSuffix}`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
         const adminData = adminRes && adminRes.ok ? await adminRes.json() : null;
-        setSummary(adminData?.stats || null);
+        // Store both stats and top-level data
+        if (adminData) {
+          setSummary({ ...adminData.stats, revenue_by_day: adminData.revenue_by_day || adminData.stats?.revenue_by_day });
+        } else {
+          setSummary(null);
+        }
 
         // For fields and transactions, fetch with date filters
         const txRes = await fetch(`${API_URL}/transactions/${urlSuffix}`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
@@ -90,9 +95,10 @@ export default function AdminAnalytics() {
   }, [filteredFields]);
 
   const revenueTrend = useMemo(() => {
-    // Use summary revenue_by_day if available (from filtered API call)
-    if (summary && Array.isArray(summary.revenue_by_day) && summary.revenue_by_day.length > 0) {
-      return summary.revenue_by_day.map((r:any) => ({ 
+    // Check if summary has revenue_by_day (from adminAnalytics hook or direct fetch)
+    const revenueData = summary?.revenue_by_day || adminAnalytics?.revenue_by_day;
+    if (revenueData && Array.isArray(revenueData) && revenueData.length > 0) {
+      return revenueData.map((r:any) => ({ 
         month: r.name || r.day || '', 
         revenue: Number(r.value || r.amount || 0) 
       }));
@@ -108,7 +114,7 @@ export default function AdminAnalytics() {
       }
     });
     return Object.keys(revByMonth).sort().map(m => ({ month: m, revenue: revByMonth[m] }));
-  }, [summary, filteredTx]);
+  }, [summary, adminAnalytics, filteredTx]);
 
   const cropDistribution = useMemo(() => {
     const map: Record<string, number> = {};

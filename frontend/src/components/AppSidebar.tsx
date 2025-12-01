@@ -1,4 +1,4 @@
-import { Home, Sprout, Map, CreditCard, BarChart3, Settings as SettingsIcon, Shield, ChevronRight } from "lucide-react";
+import { Home, Sprout, Map, CreditCard, BarChart3, Settings as SettingsIcon, ChevronRight } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { 
@@ -10,6 +10,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarHeader,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -53,18 +54,22 @@ export function AppSidebar() {
       .catch(() => {});
   }, []);
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="border-b border-sidebar-border p-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+            <Sprout className="h-5 w-5 text-primary-foreground" />
+          </div>
+          {!isCollapsed && (
+            <div>
+              <h2 className="text-sm font-semibold text-sidebar-foreground">Agricultural Management</h2>
+            </div>
+          )}
+        </div>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground flex items-center gap-2">
-            Agricultural Management
-            {role && role !== "End-App-User" && !isCollapsed && (
-              <span className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-                <Shield className="h-3 w-3" />
-                {role}
-              </span>
-            )}
-          </SidebarGroupLabel>
+          <SidebarGroupLabel>Main Menu</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
@@ -73,13 +78,13 @@ export function AppSidebar() {
                     <NavLink 
                       to={item.url}
                       className={({ isActive }) => 
-                        `group flex items-center gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : ""}`
+                        `group flex items-center gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : "hover:bg-sidebar-accent/50"}`
                       }
                     >
                       <item.icon className="h-4 w-4" />
                       {!isCollapsed && <span>{item.title}</span>}
                       {!isCollapsed && (
-                        <ChevronRight className="ml-auto h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <ChevronRight className="ml-auto h-4 w-4" />
                       )}
                     </NavLink>
                   </SidebarMenuButton>

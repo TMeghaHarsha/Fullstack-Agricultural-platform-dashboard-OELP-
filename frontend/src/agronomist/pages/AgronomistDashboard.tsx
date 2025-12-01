@@ -96,7 +96,7 @@ export default function AgronomistDashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={[{ name: "Completion", value: analytics?.lifecycle_completion ?? 0 }] }>
+              <BarChart data={[{ name: "Completion", value: typeof analytics?.lifecycle_completion === 'number' ? analytics.lifecycle_completion : (typeof analytics?.lifecycle_completion === 'object' && analytics?.lifecycle_completion?.value ? Number(analytics.lifecycle_completion.value) : 0) }] }>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis allowDecimals={false} domain={[0,100]} />

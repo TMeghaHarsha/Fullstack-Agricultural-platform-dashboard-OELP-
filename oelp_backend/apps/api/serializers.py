@@ -379,11 +379,14 @@ class PlanFeatureSerializer(serializers.ModelSerializer):
 
 class UserPlanSerializer(serializers.ModelSerializer):
     plan_name = serializers.CharField(source="plan.name", read_only=True)
+    plan_price = serializers.DecimalField(source="plan.price", max_digits=10, decimal_places=2, read_only=True)
     plan_details = PlanSerializer(source="plan", read_only=True)
+    user_name = serializers.CharField(source="user.full_name", read_only=True)
+    user_email = serializers.CharField(source="user.email", read_only=True)
 
     class Meta:
         model = UserPlan
-        fields = ("id", "user", "plan", "plan_name", "plan_details", "start_date", "end_date", "expire_at", "is_active")
+        fields = ("id", "user", "user_name", "user_email", "plan", "plan_name", "plan_price", "plan_details", "start_date", "end_date", "expire_at", "is_active", "created_at")
 
 
 class NotificationSerializer(serializers.ModelSerializer):

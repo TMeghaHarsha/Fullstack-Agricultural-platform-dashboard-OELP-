@@ -1012,7 +1012,7 @@ class FieldViewSet(viewsets.ModelViewSet):
 
 class SoilReportViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
-    queryset = SoilReport.objects.select_related("field", "soil_type").all()
+    queryset = SoilReport.objects.select_related("field", "soil_type").order_by("-created_at", "-id")
     serializer_class = SoilReportSerializer
     filterset_fields = ["field", "soil_type"]
 
