@@ -2025,6 +2025,107 @@ def get_user_subscription_features(user):
     }
 
 
+def get_user_farm_data(user):
+    """Helper function to get user's farm data for AI context"""
+    try:
+        # Get user info
+        user_info = {
+            "name": user.full_name or user.username or "User",
+            "email": user.email,
+        }
+        
+        # Get subscription info
+        sub_info = get_user_subscription_features(user)
+        
+        # Get farms
+        farms = Farm.objects.filter(user=user).values("id", "name")
+        
+        # Get fields with related data
+        fields = Field.objects.filter(user=user).select_related(
+            "farm", "crop", "crop_variety", "soil_type"
+        ).prefetch_related("field_irrigation_methods__irrigation_method")
+        
+        fields_data = []
+        total_acres = 0
+        crops_list = []
+        
+        for field in fields:
+            # Get irrigation method
+            irrigation_method = None
+            try:
+                fim = field.field_irrigation_methods.first()
+                if fim:
+                    irrigation_method = fim.irrigation_method.name
+            except Exception:
+                pass
+            
+            # Get size
+            size_acres = None
+            try:
+                hectares = (field.area or {}).get("hectares")
+                if isinstance(hectares, (int, float)):
+                    size_acres = round(float(hectares) * 2.47105, 4)
+                    total_acres += size_acres
+            except Exception:
+                pass
+            
+            # Get lifecycle dates
+            lifecycle = CropLifecycleDates.objects.filter(field=field).order_by("-id").first()
+            
+            field_data = {
+                "name": field.name,
+                "farm": field.farm.name if field.farm else None,
+                "crop": field.crop.name if field.crop else None,
+                "crop_variety": field.crop_variety.name if field.crop_variety else None,
+                "soil_type": field.soil_type.name if field.soil_type else None,
+                "irrigation_method": irrigation_method,
+                "size_acres": size_acres,
+                "location": field.location_name,
+                "is_active": field.is_active,
+                "sowing_date": str(lifecycle.sowing_date) if lifecycle and lifecycle.sowing_date else None,
+                "harvesting_date": str(lifecycle.harvesting_date) if lifecycle and lifecycle.harvesting_date else None,
+            }
+            fields_data.append(field_data)
+            
+            # Collect unique crops
+            if field.crop and field.crop.name:
+                if field.crop.name not in crops_list:
+                    crops_list.append(field.crop.name)
+        
+        # Get all crops (even if not assigned to fields)
+        all_crops = Crop.objects.all().values_list("name", flat=True).distinct()
+        
+        return {
+            "user": user_info,
+            "subscription": {
+                "plan_name": sub_info.get("plan_name", "Free"),
+                "features": sub_info.get("features", []),
+            },
+            "farms": list(farms),
+            "fields": fields_data,
+            "total_acres": round(total_acres, 2),
+            "crops_growing": crops_list,
+            "all_available_crops": list(all_crops),
+            "total_fields": len(fields_data),
+            "active_fields": len([f for f in fields_data if f.get("is_active")]),
+        }
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching user farm data: {str(e)}")
+        return {
+            "user": {"name": "User"},
+            "subscription": {"plan_name": "Free", "features": []},
+            "farms": [],
+            "fields": [],
+            "total_acres": 0,
+            "crops_growing": [],
+            "all_available_crops": [],
+            "total_fields": 0,
+            "active_fields": 0,
+        }
+
+
 class AgribotView(APIView):
     authentication_classes = [TokenAuthentication]
     
@@ -2115,28 +2216,83 @@ class AgribotView(APIView):
                 "error": "off_topic"
             }, status=status.HTTP_200_OK)
         
+        # Get user's farm data for context
+        farm_data = get_user_farm_data(user)
+        
         # Call AI API (Free alternatives: Groq, Hugging Face, or OpenAI)
         try:
             import os
+            import json
             # Support multiple API providers (in order of preference: Groq > Hugging Face > OpenAI)
             groq_api_key = os.getenv("GROQ_API_KEY")
             huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_API_KEY")
             openai_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
             
-            # Prepare prompt with context
-            system_prompt = """You are Agribot, an AI assistant specialized in agriculture and farming. 
-            You help farmers with:
-            - Crop management and best practices
-            - Soil analysis and recommendations
-            - Irrigation scheduling and methods
-            - Pest and disease identification
-            - Harvest planning
-            - Agricultural best practices
-            - General farming questions
+            # Prepare prompt with user's farm data context
+            user_context = f"""=== FARMER INFORMATION ===
+Name: {farm_data['user']['name']}
+Subscription Plan: {farm_data['subscription']['plan_name']}
+Plan Features: {', '.join(farm_data['subscription']['features']) if farm_data['subscription']['features'] else 'Basic Reports'}
+
+=== FARM STATISTICS ===
+Total Fields: {farm_data['total_fields']}
+Active Fields: {farm_data['active_fields']}
+Total Land Area: {farm_data['total_acres']} acres
+Number of Farms: {len(farm_data['farms'])}
+
+=== CROPS CURRENTLY GROWING ===
+{f', '.join(farm_data['crops_growing']) if farm_data['crops_growing'] else 'No crops currently assigned to fields'}
+
+=== AVAILABLE CROPS IN SYSTEM ===
+{', '.join(farm_data['all_available_crops'][:30]) if farm_data['all_available_crops'] else 'None'}
+
+=== FIELD DETAILS ===
+"""
+            if farm_data['fields']:
+                for idx, field in enumerate(farm_data['fields'][:15], 1):  # Limit to 15 fields for context
+                    field_info = f"""
+Field #{idx}: "{field['name']}"
+  • Farm: {field['farm'] or 'Not assigned'}
+  • Crop: {field['crop'] or 'Not assigned'}
+  • Variety: {field['crop_variety'] or 'Not specified'}
+  • Size: {field['size_acres'] or 'Unknown'} acres
+  • Soil Type: {field['soil_type'] or 'Not specified'}
+  • Irrigation Method: {field['irrigation_method'] or 'Not specified'}
+  • Location: {field['location'] or 'Not specified'}
+  • Status: {'Active' if field['is_active'] else 'Inactive'}
+  • Sowing Date: {field['sowing_date'] or 'Not set'}
+  • Harvest Date: {field['harvesting_date'] or 'Not set'}
+"""
+                    user_context += field_info
+            else:
+                user_context += "No fields registered yet.\n"
             
-            Keep responses concise, practical, and focused on agriculture. If asked about non-agricultural topics, politely redirect to farming-related questions."""
+            system_prompt = f"""You are Agribot, an AI assistant specialized in agriculture and farming. You have DIRECT ACCESS to this farmer's actual farm data.
+
+{user_context}
+
+CRITICAL INSTRUCTIONS:
+1. ALWAYS use the farmer's actual data from above when answering questions
+2. If asked "what crops am I growing?" or "list my crops", respond with the EXACT crops from "CROPS CURRENTLY GROWING" section
+3. If asked about fields, reference the SPECIFIC field names and details from "FIELD DETAILS"
+4. If asked about farm size or acres, use the EXACT number from "Total Land Area: {farm_data['total_acres']} acres"
+5. If asked about subscription/plan, mention their current plan: {farm_data['subscription']['plan_name']}
+6. Be specific and personal - use "your" instead of "the farmer's" when referring to their data
+7. If they ask about a specific crop/field, look it up in the data above and provide details
+
+You help with:
+- Answering questions about their specific crops, fields, and farm
+- Crop management and best practices
+- Soil analysis and recommendations
+- Irrigation scheduling and methods
+- Pest and disease identification
+- Harvest planning
+- Agricultural best practices
+- General farming questions
+
+Keep responses concise, practical, and focused on agriculture. ALWAYS reference their actual farm data when available."""
             
-            full_prompt = f"{system_prompt}\n\nUser: {message}\n\nAgribot:"
+            full_prompt = f"{system_prompt}\n\nUser Question: {message}\n\nAgribot Response:"
             
             # Try Groq API first (Free and Fast), then Hugging Face, then OpenAI
             if groq_api_key:
