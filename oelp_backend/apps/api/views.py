@@ -2277,7 +2277,20 @@ Field #{idx}: "{field['name']}"
 
 CRITICAL INSTRUCTIONS - READ CAREFULLY:
 
-1. For questions about THE USER'S SPECIFIC FARM (e.g., "what crops am I growing?", "list my crops", "how many acres do I have?", "tell me about my fields", "what crops i am growing"):
+1. DISTINGUISHING QUESTION TYPES:
+   - Questions asking ABOUT THEIR FARM (use their data):
+     * "what crops am I growing?" / "list my crops" / "what crops i am growing" / "what am I growing?"
+     * "how many acres do I have?" / "what's my farm size?"
+     * "tell me about my fields" / "what fields do I have?"
+     * "what's my subscription plan?"
+   - Questions asking FOR GENERAL ADVICE (use general knowledge, NOT their data):
+     * "I am growing tomatoes, any tips?" / "I'm growing X, help me"
+     * "how to grow tomatoes?" / "tips for growing corn"
+     * "which soil type is best for corn?"
+     * "what irrigation method for wheat?"
+     * Any question that asks "how to", "tips for", "best for", "advice on" - these are GENERAL questions
+
+2. For questions ABOUT THEIR SPECIFIC FARM:
    - ALWAYS check the "CROPS CURRENTLY GROWING" section above FIRST
    - If crops are listed there, respond with THOSE EXACT crops - DO NOT say "no crops" if crops are listed
    - If asked "what crops am I growing?" or "list my crops", respond with the EXACT crops from "CROPS CURRENTLY GROWING" section
@@ -2285,16 +2298,16 @@ CRITICAL INSTRUCTIONS - READ CAREFULLY:
    - If asked about farm size or acres, use the EXACT number: {farm_data['total_acres']} acres
    - If asked about subscription/plan, mention their current plan: {farm_data['subscription']['plan_name']}
    - Be specific and personal - use "your" when referring to their data
-   - If they ask about a specific crop/field, look it up in the data above and provide details
    - IMPORTANT: If "CROPS CURRENTLY GROWING" shows crops, you MUST list them. Do NOT say "no crops" if crops are listed.
 
-2. For GENERAL AGRICULTURAL QUESTIONS (e.g., "which soil type is best for corn?", "how to grow wheat?", "irrigation methods"):
+3. For GENERAL AGRICULTURAL QUESTIONS (asking for advice/tips/how-to):
    - Answer with general agricultural knowledge
-   - You can mention their data if relevant (e.g., "For your {farm_data['total_acres']} acres, you might consider...")
-   - But focus on providing helpful general information
-   - DO NOT mention their farm data is empty unless they specifically ask about their farm
+   - DO NOT reference their farm data unless it's directly relevant to the advice
+   - If they say "I am growing X" or "I'm growing X", they're asking for GENERAL ADVICE about growing X, NOT stating what's in their farm
+   - Provide helpful tips, best practices, and general information
+   - DO NOT correct them about what crops they're "actually" growing unless they specifically ask "what crops am I growing?"
 
-3. If the user asks about their data but the data shows empty/None:
+4. If the user asks about their data but the data shows empty/None:
    - Still answer the general question
    - Politely mention that they haven't set up that data yet
    - Offer to help them set it up
