@@ -2141,90 +2141,125 @@ class AgribotView(APIView):
             # Try Groq API first (Free and Fast), then Hugging Face, then OpenAI
             if groq_api_key:
                 # Use Groq API (Free, Fast, No Credit Card Required)
-                response = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {groq_api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "model": "llama-3.1-8b-instant",  # Free model
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": message}
-                        ],
-                        "max_tokens": 500,
-                        "temperature": 0.7
-                    },
-                    timeout=30
-                )
+                # Try multiple models in case one is unavailable
+                groq_models = ["llama-3.1-8b-instant", "llama-3.2-3b-preview", "mixtral-8x7b-32768"]
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
-                    
-                    # Save usage increment after successful API call
-                    if usage:
-                        try:
-                            usage.used_count += 1
-                            usage.save()
-                        except Exception:
-                            pass
-                    
-                    return Response({
-                        "response": ai_response,
-                        "remaining": (usage.max_count - usage.used_count) if usage else None
-                    })
+                for model_name in groq_models:
+                    try:
+                        response = requests.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {groq_api_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json={
+                                "model": model_name,
+                                "messages": [
+                                    {"role": "system", "content": system_prompt},
+                                    {"role": "user", "content": message}
+                                ],
+                                "max_tokens": 500,
+                                "temperature": 0.7
+                            },
+                            timeout=30
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
+                            
+                            # Save usage increment after successful API call
+                            if usage:
+                                try:
+                                    usage.used_count += 1
+                                    usage.save()
+                                except Exception:
+                                    pass
+                            
+                            return Response({
+                                "response": ai_response,
+                                "remaining": (usage.max_count - usage.used_count) if usage else None
+                            })
+                        elif response.status_code in [404, 410]:  # Model not found or gone, try next model
+                            continue  # Try next model
+                        else:
+                            # For other errors, try to get error message but still try next model
+                            try:
+                                error_data = response.json()
+                                error_msg = error_data.get("error", {}).get("message", "")
+                                if "quota" in error_msg.lower() or "billing" in error_msg.lower():
+                                    # Quota error - don't try more models
+                                    return Response({
+                                        "response": "I'm currently unavailable due to service limitations. Please contact support or try again later.",
+                                        "error": "quota_exceeded"
+                                    }, status=status.HTTP_200_OK)
+                            except Exception:
+                                pass
+                            continue  # Try next model
+                    except Exception:
+                        continue  # Try next model
             
             # Try Hugging Face if Groq not available
             if huggingface_api_key:
-                # Use Hugging Face Inference API with a good chat model
-                response = requests.post(
-                    "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-                    headers={
-                        "Authorization": f"Bearer {huggingface_api_key}",
-                        "Content-Type": "application/json"
-                    },
-                    json={
-                        "inputs": f"<s>[INST] {system_prompt}\n\nUser: {message} [/INST]",
-                        "parameters": {
-                            "max_new_tokens": 500,
-                            "temperature": 0.7,
-                            "return_full_text": False
-                        }
-                    },
-                    timeout=45
-                )
+                # Use Hugging Face Inference API - try multiple models
+                hf_models = [
+                    "google/flan-t5-large",  # Reliable text generation
+                    "microsoft/DialoGPT-large",  # Conversational
+                    "facebook/blenderbot-400M-distill"  # Chat model
+                ]
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    # Hugging Face returns generated text
-                    if isinstance(data, list) and len(data) > 0:
-                        ai_response = data[0].get("generated_text", "").strip()
-                    elif isinstance(data, dict):
-                        ai_response = data.get("generated_text", "").strip()
-                    else:
-                        ai_response = str(data).strip()
-                    
-                    # Clean up the response
-                    if "[/INST]" in ai_response:
-                        ai_response = ai_response.split("[/INST]")[-1].strip()
-                    
-                    if not ai_response:
-                        ai_response = "I'm sorry, I couldn't generate a response. Please try again."
-                    
-                    # Save usage increment after successful API call
-                    if usage:
-                        try:
-                            usage.used_count += 1
-                            usage.save()
-                        except Exception:
-                            pass
-                    
-                    return Response({
-                        "response": ai_response,
-                        "remaining": (usage.max_count - usage.used_count) if usage else None
-                    })
+                for model_name in hf_models:
+                    try:
+                        response = requests.post(
+                            f"https://api-inference.huggingface.co/models/{model_name}",
+                            headers={
+                                "Authorization": f"Bearer {huggingface_api_key}",
+                                "Content-Type": "application/json"
+                            },
+                            json={
+                                "inputs": f"{system_prompt}\n\nUser: {message}\n\nAssistant:",
+                                "parameters": {
+                                    "max_new_tokens": 500,
+                                    "temperature": 0.7,
+                                    "return_full_text": False
+                                }
+                            },
+                            timeout=45
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            # Hugging Face returns generated text
+                            if isinstance(data, list) and len(data) > 0:
+                                ai_response = data[0].get("generated_text", "").strip()
+                            elif isinstance(data, dict):
+                                ai_response = data.get("generated_text", "").strip()
+                            else:
+                                ai_response = str(data).strip()
+                            
+                            # Clean up the response
+                            if "Assistant:" in ai_response:
+                                ai_response = ai_response.split("Assistant:")[-1].strip()
+                            
+                            if not ai_response or len(ai_response) < 10:
+                                continue  # Try next model if response is too short
+                            
+                            # Save usage increment after successful API call
+                            if usage:
+                                try:
+                                    usage.used_count += 1
+                                    usage.save()
+                                except Exception:
+                                    pass
+                            
+                            return Response({
+                                "response": ai_response,
+                                "remaining": (usage.max_count - usage.used_count) if usage else None
+                            })
+                        elif response.status_code not in [404, 410, 503]:  # Skip if model not found/gone/loading
+                            break  # Other errors, don't try more models
+                    except Exception:
+                        continue  # Try next model
             
             # Fallback to OpenAI if Hugging Face not configured
             if openai_api_key:
@@ -2269,44 +2304,12 @@ class AgribotView(APIView):
                     "response": "AI service is not configured. Please set GROQ_API_KEY, HUGGINGFACE_API_KEY, or OPENAI_API_KEY environment variable.",
                     "error": "config_error"
                 }, status=status.HTTP_200_OK)
-            else:
-                # Handle different error types
-                try:
-                    error_data = response.json() if response.content else {}
-                    error_info = error_data.get("error", {})
-                    error_msg = error_info.get("message", "Failed to get response from AI service")
-                    error_type = error_info.get("type", "unknown")
-                    
-                    # Handle quota/billing errors specifically
-                    if "quota" in error_msg.lower() or "billing" in error_msg.lower() or error_type == "insufficient_quota":
-                        return Response({
-                            "response": "I'm currently unavailable due to service limitations. Please contact support or try again later. The AI service quota has been exceeded.",
-                            "error": "quota_exceeded",
-                            "detail": error_msg
-                        }, status=status.HTTP_200_OK)  # Return 200 so frontend can display the message
-                    
-                    # Handle rate limit errors
-                    if response.status_code == 429 or "rate limit" in error_msg.lower():
-                        return Response({
-                            "response": "I'm receiving too many requests right now. Please wait a moment and try again.",
-                            "error": "rate_limit",
-                            "detail": error_msg
-                        }, status=status.HTTP_200_OK)
-                    
-                    # Other errors
-                    return Response({
-                        "response": f"I encountered an error: {error_msg}. Please try again later or contact support.",
-                        "error": "ai_service_error",
-                        "detail": error_msg
-                    }, status=status.HTTP_200_OK)  # Return 200 so frontend can display the message
-                    
-                except Exception as parse_error:
-                    # If we can't parse the error, return a generic message
-                    return Response({
-                        "response": f"I encountered an error (HTTP {response.status_code}). Please try again later or contact support.",
-                        "error": "ai_service_error",
-                        "detail": f"HTTP {response.status_code}: Failed to parse error response"
-                    }, status=status.HTTP_200_OK)
+            
+            # If we get here, all AI services failed - return helpful error
+            return Response({
+                "response": "I'm currently unable to process your request. The AI service may be temporarily unavailable or the model endpoint has changed. Please try again in a few moments or contact support.",
+                "error": "service_unavailable"
+            }, status=status.HTTP_200_OK)
                 
         except requests.exceptions.Timeout:
             return Response({
