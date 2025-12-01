@@ -2174,32 +2174,70 @@ class AgribotView(APIView):
                     "remaining": (usage.max_count - usage.used_count) if usage else None
                 })
             else:
+                # Handle different error types
                 try:
                     error_data = response.json() if response.content else {}
-                    error_msg = error_data.get("error", {}).get("message", "Failed to get response from AI service")
-                except Exception:
-                    error_msg = f"HTTP {response.status_code}: Failed to get response from AI service"
-                return Response({
-                    "detail": f"AI service error: {error_msg}",
-                    "error": "ai_service_error"
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    error_info = error_data.get("error", {})
+                    error_msg = error_info.get("message", "Failed to get response from AI service")
+                    error_type = error_info.get("type", "unknown")
+                    
+                    # Handle quota/billing errors specifically
+                    if "quota" in error_msg.lower() or "billing" in error_msg.lower() or error_type == "insufficient_quota":
+                        return Response({
+                            "response": "I'm currently unavailable due to service limitations. Please contact support or try again later. The AI service quota has been exceeded.",
+                            "error": "quota_exceeded",
+                            "detail": error_msg
+                        }, status=status.HTTP_200_OK)  # Return 200 so frontend can display the message
+                    
+                    # Handle rate limit errors
+                    if response.status_code == 429 or "rate limit" in error_msg.lower():
+                        return Response({
+                            "response": "I'm receiving too many requests right now. Please wait a moment and try again.",
+                            "error": "rate_limit",
+                            "detail": error_msg
+                        }, status=status.HTTP_200_OK)
+                    
+                    # Other errors
+                    return Response({
+                        "response": f"I encountered an error: {error_msg}. Please try again later or contact support.",
+                        "error": "ai_service_error",
+                        "detail": error_msg
+                    }, status=status.HTTP_200_OK)  # Return 200 so frontend can display the message
+                    
+                except Exception as parse_error:
+                    # If we can't parse the error, return a generic message
+                    return Response({
+                        "response": f"I encountered an error (HTTP {response.status_code}). Please try again later or contact support.",
+                        "error": "ai_service_error",
+                        "detail": f"HTTP {response.status_code}: Failed to parse error response"
+                    }, status=status.HTTP_200_OK)
                 
+        except requests.exceptions.Timeout:
+            return Response({
+                "response": "The AI service is taking too long to respond. Please try again later.",
+                "error": "timeout_error"
+            }, status=status.HTTP_200_OK)
+        except requests.exceptions.ConnectionError:
+            return Response({
+                "response": "Unable to connect to the AI service. Please check your internet connection and try again.",
+                "error": "connection_error"
+            }, status=status.HTTP_200_OK)
         except requests.exceptions.RequestException as e:
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Agribot request error: {str(e)}")
             return Response({
-                "detail": f"Error connecting to AI service: {str(e)}",
+                "response": f"Error connecting to AI service: {str(e)}. Please try again later.",
                 "error": "connection_error"
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_200_OK)
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"Agribot unexpected error: {str(e)}", exc_info=True)
             return Response({
-                "detail": f"Unexpected error: {str(e)}",
+                "response": f"I encountered an unexpected error. Please try again later or contact support. Error: {str(e)}",
                 "error": "unexpected_error"
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            }, status=status.HTTP_200_OK)
     
     def get(self, request):
         """Get user's AI usage status"""
@@ -2825,4 +2863,3 @@ def me_view(request):
             'phone_number': user.phone_number,
             'avatar': user.avatar,
         })
-

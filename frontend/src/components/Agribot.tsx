@@ -74,12 +74,42 @@ export default function Agribot({ API_URL, authHeaders }: AgribotProps) {
 
       const data = await res.json();
 
+      // Backend now returns 200 with error messages, so check for error field
       if (res.ok) {
-        setMessages((prev) => [...prev, { role: "assistant", content: data.response || "I'm sorry, I couldn't generate a response." }]);
-        if (data.remaining !== undefined) {
-          setUsageInfo((prev: any) => ({ ...prev, remaining: data.remaining }));
+        // Check if there's an error in the response
+        if (data.error) {
+          if (data.error === "off_topic") {
+            setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+          } else if (data.error === "limit_exceeded") {
+            toast.error(data.detail || "Daily limit exceeded");
+            setMessages((prev) => [...prev, { role: "assistant", content: data.detail || "You've reached your daily limit. Please try again tomorrow or upgrade to Enterprise for unlimited access." }]);
+          } else if (data.error === "feature_not_available") {
+            toast.error(data.detail || "AI Assistant not available");
+            setMessages((prev) => [...prev, { role: "assistant", content: data.detail || "AI Assistant is only available with TopUp or Enterprise plans." }]);
+          } else if (data.error === "quota_exceeded") {
+            toast.error("AI service quota exceeded. Please contact support or check OpenAI billing.");
+            setMessages((prev) => [...prev, { role: "assistant", content: data.response || "I'm currently unavailable due to service limitations. Please contact support." }]);
+          } else if (data.error === "rate_limit") {
+            toast.warning("Rate limit reached. Please wait a moment.");
+            setMessages((prev) => [...prev, { role: "assistant", content: data.response || "I'm receiving too many requests. Please wait and try again." }]);
+          } else {
+            // Other errors - show the response message
+            if (data.response) {
+              setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+            } else {
+              toast.error(data.detail || "Failed to get response");
+              setMessages((prev) => [...prev, { role: "assistant", content: "I'm sorry, I encountered an error. Please try again later." }]);
+            }
+          }
+        } else {
+          // Success - no error
+          setMessages((prev) => [...prev, { role: "assistant", content: data.response || "I'm sorry, I couldn't generate a response." }]);
+          if (data.remaining !== undefined) {
+            setUsageInfo((prev: any) => ({ ...prev, remaining: data.remaining }));
+          }
         }
       } else {
+        // HTTP error status
         if (data.error === "off_topic") {
           setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
         } else if (data.error === "limit_exceeded") {
