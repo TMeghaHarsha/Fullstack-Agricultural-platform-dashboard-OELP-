@@ -2043,18 +2043,18 @@ def get_user_farm_data(user):
         # Get fields with related data
         fields = Field.objects.filter(user=user).select_related(
             "farm", "crop", "crop_variety", "soil_type"
-        ).prefetch_related("field_irrigation_methods__irrigation_method")
+        )
         
         fields_data = []
         total_acres = 0
         crops_list = []
         
         for field in fields:
-            # Get irrigation method
+            # Get irrigation method - FieldIrrigationMethod doesn't have related_name, use default
             irrigation_method = None
             try:
-                fim = field.field_irrigation_methods.first()
-                if fim:
+                fim = FieldIrrigationMethod.objects.filter(field=field).select_related("irrigation_method").first()
+                if fim and fim.irrigation_method:
                     irrigation_method = fim.irrigation_method.name
             except Exception:
                 pass
@@ -2087,10 +2087,11 @@ def get_user_farm_data(user):
             }
             fields_data.append(field_data)
             
-            # Collect unique crops
-            if field.crop and field.crop.name:
-                if field.crop.name not in crops_list:
-                    crops_list.append(field.crop.name)
+            # Collect unique crops (only if crop is assigned)
+            if field.crop and hasattr(field.crop, 'name') and field.crop.name:
+                crop_name = field.crop.name
+                if crop_name and crop_name not in crops_list:
+                    crops_list.append(crop_name)
         
         # Get all crops (even if not assigned to fields)
         all_crops = Crop.objects.all().values_list("name", flat=True).distinct()
@@ -2111,10 +2112,13 @@ def get_user_farm_data(user):
         }
     except Exception as e:
         import logging
+        import traceback
         logger = logging.getLogger(__name__)
         logger.error(f"Error fetching user farm data: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        # Return empty but don't crash - let AI handle it
         return {
-            "user": {"name": "User"},
+            "user": {"name": user.full_name or user.username or "User", "email": getattr(user, 'email', '')},
             "subscription": {"plan_name": "Free", "features": []},
             "farms": [],
             "fields": [],
@@ -2271,18 +2275,33 @@ Field #{idx}: "{field['name']}"
 
 {user_context}
 
-CRITICAL INSTRUCTIONS:
-1. ALWAYS use the farmer's actual data from above when answering questions
-2. If asked "what crops am I growing?" or "list my crops", respond with the EXACT crops from "CROPS CURRENTLY GROWING" section
-3. If asked about fields, reference the SPECIFIC field names and details from "FIELD DETAILS"
-4. If asked about farm size or acres, use the EXACT number from "Total Land Area: {farm_data['total_acres']} acres"
-5. If asked about subscription/plan, mention their current plan: {farm_data['subscription']['plan_name']}
-6. Be specific and personal - use "your" instead of "the farmer's" when referring to their data
-7. If they ask about a specific crop/field, look it up in the data above and provide details
+CRITICAL INSTRUCTIONS - READ CAREFULLY:
+
+1. For questions about THE USER'S SPECIFIC FARM (e.g., "what crops am I growing?", "list my crops", "how many acres do I have?", "tell me about my fields", "what crops i am growing"):
+   - ALWAYS check the "CROPS CURRENTLY GROWING" section above FIRST
+   - If crops are listed there, respond with THOSE EXACT crops - DO NOT say "no crops" if crops are listed
+   - If asked "what crops am I growing?" or "list my crops", respond with the EXACT crops from "CROPS CURRENTLY GROWING" section
+   - If asked about fields, reference the SPECIFIC field names and details from "FIELD DETAILS"
+   - If asked about farm size or acres, use the EXACT number: {farm_data['total_acres']} acres
+   - If asked about subscription/plan, mention their current plan: {farm_data['subscription']['plan_name']}
+   - Be specific and personal - use "your" when referring to their data
+   - If they ask about a specific crop/field, look it up in the data above and provide details
+   - IMPORTANT: If "CROPS CURRENTLY GROWING" shows crops, you MUST list them. Do NOT say "no crops" if crops are listed.
+
+2. For GENERAL AGRICULTURAL QUESTIONS (e.g., "which soil type is best for corn?", "how to grow wheat?", "irrigation methods"):
+   - Answer with general agricultural knowledge
+   - You can mention their data if relevant (e.g., "For your {farm_data['total_acres']} acres, you might consider...")
+   - But focus on providing helpful general information
+   - DO NOT mention their farm data is empty unless they specifically ask about their farm
+
+3. If the user asks about their data but the data shows empty/None:
+   - Still answer the general question
+   - Politely mention that they haven't set up that data yet
+   - Offer to help them set it up
 
 You help with:
-- Answering questions about their specific crops, fields, and farm
-- Crop management and best practices
+- Answering questions about their specific crops, fields, and farm (use their data)
+- General crop management and best practices (use agricultural knowledge)
 - Soil analysis and recommendations
 - Irrigation scheduling and methods
 - Pest and disease identification
@@ -2290,7 +2309,7 @@ You help with:
 - Agricultural best practices
 - General farming questions
 
-Keep responses concise, practical, and focused on agriculture. ALWAYS reference their actual farm data when available."""
+Keep responses concise, practical, and focused on agriculture. Use their actual data when they ask about THEIR farm, use general knowledge for general questions."""
             
             full_prompt = f"{system_prompt}\n\nUser Question: {message}\n\nAgribot Response:"
             
