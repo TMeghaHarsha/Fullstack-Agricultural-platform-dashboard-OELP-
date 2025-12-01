@@ -2115,16 +2115,13 @@ class AgribotView(APIView):
                 "error": "off_topic"
             }, status=status.HTTP_200_OK)
         
-        # Call OpenAI API
+        # Call AI API (Free alternatives: Groq, Hugging Face, or OpenAI)
         try:
             import os
+            # Support multiple API providers (in order of preference: Groq > Hugging Face > OpenAI)
+            groq_api_key = os.getenv("GROQ_API_KEY")
+            huggingface_api_key = os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_API_KEY")
             openai_api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-            
-            if not openai_api_key:
-                return Response({
-                    "detail": "OpenAI API key not configured. Please contact support.",
-                    "error": "config_error"
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             # Prepare prompt with context
             system_prompt = """You are Agribot, an AI assistant specialized in agriculture and farming. 
@@ -2139,40 +2136,139 @@ class AgribotView(APIView):
             
             Keep responses concise, practical, and focused on agriculture. If asked about non-agricultural topics, politely redirect to farming-related questions."""
             
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {openai_api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "gpt-3.5-turbo",
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": message}
-                    ],
-                    "max_tokens": 500,
-                    "temperature": 0.7
-                },
-                timeout=30
-            )
+            full_prompt = f"{system_prompt}\n\nUser: {message}\n\nAgribot:"
             
-            if response.status_code == 200:
-                data = response.json()
-                ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
+            # Try Groq API first (Free and Fast), then Hugging Face, then OpenAI
+            if groq_api_key:
+                # Use Groq API (Free, Fast, No Credit Card Required)
+                response = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {groq_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "llama-3.1-8b-instant",  # Free model
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": message}
+                        ],
+                        "max_tokens": 500,
+                        "temperature": 0.7
+                    },
+                    timeout=30
+                )
                 
-                # Save usage increment after successful API call
-                if usage:
-                    try:
-                        usage.used_count += 1
-                        usage.save()
-                    except Exception:
-                        pass
+                if response.status_code == 200:
+                    data = response.json()
+                    ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
+                    
+                    # Save usage increment after successful API call
+                    if usage:
+                        try:
+                            usage.used_count += 1
+                            usage.save()
+                        except Exception:
+                            pass
+                    
+                    return Response({
+                        "response": ai_response,
+                        "remaining": (usage.max_count - usage.used_count) if usage else None
+                    })
+            
+            # Try Hugging Face if Groq not available
+            if huggingface_api_key:
+                # Use Hugging Face Inference API with a good chat model
+                response = requests.post(
+                    "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+                    headers={
+                        "Authorization": f"Bearer {huggingface_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "inputs": f"<s>[INST] {system_prompt}\n\nUser: {message} [/INST]",
+                        "parameters": {
+                            "max_new_tokens": 500,
+                            "temperature": 0.7,
+                            "return_full_text": False
+                        }
+                    },
+                    timeout=45
+                )
                 
+                if response.status_code == 200:
+                    data = response.json()
+                    # Hugging Face returns generated text
+                    if isinstance(data, list) and len(data) > 0:
+                        ai_response = data[0].get("generated_text", "").strip()
+                    elif isinstance(data, dict):
+                        ai_response = data.get("generated_text", "").strip()
+                    else:
+                        ai_response = str(data).strip()
+                    
+                    # Clean up the response
+                    if "[/INST]" in ai_response:
+                        ai_response = ai_response.split("[/INST]")[-1].strip()
+                    
+                    if not ai_response:
+                        ai_response = "I'm sorry, I couldn't generate a response. Please try again."
+                    
+                    # Save usage increment after successful API call
+                    if usage:
+                        try:
+                            usage.used_count += 1
+                            usage.save()
+                        except Exception:
+                            pass
+                    
+                    return Response({
+                        "response": ai_response,
+                        "remaining": (usage.max_count - usage.used_count) if usage else None
+                    })
+            
+            # Fallback to OpenAI if Hugging Face not configured
+            if openai_api_key:
+                response = requests.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {openai_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "gpt-3.5-turbo",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": message}
+                        ],
+                        "max_tokens": 500,
+                        "temperature": 0.7
+                    },
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    ai_response = data.get("choices", [{}])[0].get("message", {}).get("content", "I'm sorry, I couldn't generate a response.")
+                    
+                    # Save usage increment after successful API call
+                    if usage:
+                        try:
+                            usage.used_count += 1
+                            usage.save()
+                        except Exception:
+                            pass
+                    
+                    return Response({
+                        "response": ai_response,
+                        "remaining": (usage.max_count - usage.used_count) if usage else None
+                    })
+            
+            # No API key configured
+            if not groq_api_key and not huggingface_api_key and not openai_api_key:
                 return Response({
-                    "response": ai_response,
-                    "remaining": (usage.max_count - usage.used_count) if usage else None
-                })
+                    "response": "AI service is not configured. Please set GROQ_API_KEY, HUGGINGFACE_API_KEY, or OPENAI_API_KEY environment variable.",
+                    "error": "config_error"
+                }, status=status.HTTP_200_OK)
             else:
                 # Handle different error types
                 try:
