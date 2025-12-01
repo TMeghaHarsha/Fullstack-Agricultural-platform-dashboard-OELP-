@@ -1562,7 +1562,15 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TransactionSerializer
 
     def get_queryset(self):
-        return Transaction.objects.filter(user=self.request.user).select_related("plan")
+        user = self.request.user
+        user_roles = list(user.user_roles.select_related("role").values_list("role__name", flat=True))
+        
+        # Business role can see all transactions for financial management
+        if "Business" in user_roles:
+            return Transaction.objects.all().select_related("plan", "user").order_by("-created_at")
+        
+        # Other users see only their own transactions
+        return Transaction.objects.filter(user=user).select_related("plan").order_by("-created_at")
 
     @action(
         detail=True,
@@ -1630,8 +1638,19 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         return response
 
 class RecentSubscriptionsView(APIView):
+    authentication_classes = [TokenAuthentication]
+    
     def get(self, request):
-        return Response([], status=200)
+        # Get recent active subscriptions (excluding Free plan), ordered by most recent
+        from django.utils import timezone
+        recent_subs = UserPlan.objects.filter(
+            is_active=True
+        ).exclude(
+            plan__name__iexact="Free"
+        ).select_related("user", "plan").order_by("-created_at")[:10]
+        
+        serializer = UserPlanSerializer(recent_subs, many=True)
+        return Response(serializer.data, status=200)
 
 class RazorpayCreateOrderView(APIView):
     authentication_classes = [TokenAuthentication]

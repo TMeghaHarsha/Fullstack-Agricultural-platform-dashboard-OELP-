@@ -9,15 +9,34 @@ const API_URL = (import.meta as any).env.VITE_API_URL || (import.meta as any).en
 export default function AgronomistDashboard() {
   const [dashboard, setDashboard] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
+    setError(null);
     Promise.all([
-      fetch(`${API_URL}/dashboard/`, { headers: { Authorization: `Token ${token}` } }).then(r=>r.ok?r.json():null),
-      fetch(`${API_URL}/analytics/summary/`, { headers: { Authorization: `Token ${token}` } }).then(r=>r.ok?r.json():null),
-    ]).then(([d, a])=>{ setDashboard(d); setAnalytics(a); }).catch(()=>{ setDashboard(null); setAnalytics(null); });
+      fetch(`${API_URL}/dashboard/`, { headers: { Authorization: `Token ${token}` } }).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${API_URL}/analytics/summary/`, { headers: { Authorization: `Token ${token}` } }).then(r=>r.ok?r.json():null).catch(()=>null),
+    ]).then(([d, a])=>{ 
+      setDashboard(d); 
+      setAnalytics(a); 
+      setError(null);
+    }).catch((err)=>{
+      setError(err.message || "Failed to load dashboard data");
+      setDashboard(null); 
+      setAnalytics(null); 
+    });
   }, []);
+
+  if (error) {
+    return (
+      <div className="space-y-6 p-6">
+        <div className="text-red-600">Error: {error}</div>
+        <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-primary-foreground rounded">Retry</button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

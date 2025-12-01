@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Sprout, Bell, Users, Settings, AlertCircle } from "lucide-react";
+import { LayoutDashboard, Sprout, Bell, Users, Settings, AlertCircle, ChevronRight } from "lucide-react";
 
 export function AgronomistSidebar() {
   const link = (to: string, label: string, Icon: any) => (
@@ -15,6 +15,7 @@ export function AgronomistSidebar() {
     >
       <Icon className="h-4 w-4" />
       <span>{label}</span>
+      <ChevronRight className="ml-auto h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
     </NavLink>
   );
 
@@ -22,6 +23,10 @@ export function AgronomistSidebar() {
     <aside className="hidden md:block w-64 border-r bg-sidebar p-4">
       <div className="mb-4 text-xs font-semibold text-sidebar-foreground">
         Agronomist
+      </div>
+
+      <div className="mb-2 text-xs font-semibold text-sidebar-foreground/70">
+        Main Menu
       </div>
 
       <nav className="space-y-1">

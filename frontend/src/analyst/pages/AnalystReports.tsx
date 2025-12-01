@@ -69,7 +69,7 @@ export default function AnalystReports() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={exportCSV}>
-            <Download className="mr-2 h-4 w-4" /> Export CSV
+            <Download className="mr-2 h-4 w-4" /> Export PDF Report
           </Button>
         </div>
       </div>
@@ -124,16 +124,20 @@ export default function AnalystReports() {
                   <TableHead>ID</TableHead>
                   <TableHead>Field</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Texture</TableHead>
+                  <TableHead>pH</TableHead>
+                  <TableHead>EC</TableHead>
+                  <TableHead>Soil Type</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reports.slice(0, 10).map((r:any) => (
                   <TableRow key={r.id}>
                     <TableCell>{r.id}</TableCell>
-                    <TableCell>{r.field || r.field_name || '-'}</TableCell>
-                    <TableCell>{r.sampled_at ? new Date(r.sampled_at).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>{r.texture || r.soil_texture || '-'}</TableCell>
+                    <TableCell>{r.field_name || r.field || (typeof r.field === 'object' ? r.field?.name : '-') || '-'}</TableCell>
+                    <TableCell>{r.sampled_at ? new Date(r.sampled_at).toLocaleDateString() : (r.created_at ? new Date(r.created_at).toLocaleDateString() : '-')}</TableCell>
+                    <TableCell>{r.ph != null ? r.ph.toFixed(2) : '-'}</TableCell>
+                    <TableCell>{r.ec != null ? r.ec.toFixed(2) : '-'}</TableCell>
+                    <TableCell>{r.soil_type_name || r.soil_type || (typeof r.soil_type === 'object' ? r.soil_type?.name : '-') || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

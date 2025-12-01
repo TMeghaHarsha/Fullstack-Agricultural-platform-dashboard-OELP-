@@ -1,4 +1,4 @@
-import { Home, Sprout, Map, CreditCard, BarChart3, Settings as SettingsIcon, Shield } from "lucide-react";
+import { Home, Sprout, Map, CreditCard, BarChart3, Settings as SettingsIcon, Shield, ChevronRight } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { 
@@ -73,11 +73,14 @@ export function AppSidebar() {
                     <NavLink 
                       to={item.url}
                       className={({ isActive }) => 
-                        isActive ? "bg-sidebar-accent" : ""
+                        `group flex items-center gap-3 ${isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : ""}`
                       }
                     >
                       <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                      {!isCollapsed && <span>{item.title}</span>}
+                      {!isCollapsed && (
+                        <ChevronRight className="ml-auto h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

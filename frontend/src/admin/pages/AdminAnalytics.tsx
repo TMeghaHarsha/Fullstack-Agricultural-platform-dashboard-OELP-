@@ -19,31 +19,30 @@ export default function AdminAnalytics() {
     const token = localStorage.getItem('token');
     (async () => {
       try {
-        // Prefer hook-provided adminAnalytics/transactions when available
-        if (adminAnalytics) {
-          setSummary(adminAnalytics.stats || null);
-        } else {
-          const adminRes = await fetch(`${API_URL}/admin/analytics/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
-          const adminData = adminRes && adminRes.ok ? await adminRes.json() : null;
-          setSummary(adminData?.stats || null);
-        }
+        // Build query params for date filters
+        const params = new URLSearchParams();
+        if (dateRange.start) params.set('start_date', dateRange.start);
+        if (dateRange.end) params.set('end_date', dateRange.end);
+        const queryString = params.toString();
+        const urlSuffix = queryString ? `?${queryString}` : '';
 
-        // For fields and transactions, prefer hook data if it contains values
-        if (hookTx && hookTx.length > 0) {
-          setTransactions(hookTx);
-        } else {
-          const txRes = await fetch(`${API_URL}/transactions/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
-          const txJson = txRes && txRes.ok ? await txRes.json() : { results: [] };
-          setTransactions(Array.isArray(txJson?.results) ? txJson.results : txJson || []);
-        }
+        // Fetch admin analytics with date filters
+        const adminRes = await fetch(`${API_URL}/admin/analytics/${urlSuffix}`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
+        const adminData = adminRes && adminRes.ok ? await adminRes.json() : null;
+        setSummary(adminData?.stats || null);
 
-        // Fields remain fetched from admin endpoint (no hook currently provides fields)
-        const fieldsRes = await fetch(`${API_URL}/admin/fields/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
+        // For fields and transactions, fetch with date filters
+        const txRes = await fetch(`${API_URL}/transactions/${urlSuffix}`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
+        const txJson = txRes && txRes.ok ? await txRes.json() : { results: [] };
+        setTransactions(Array.isArray(txJson?.results) ? txJson.results : txJson || []);
+
+        // Fields remain fetched from admin endpoint
+        const fieldsRes = await fetch(`${API_URL}/admin/fields/${urlSuffix}`, { headers: { Authorization: `Token ${token}` } }).catch(() => null);
         const fieldsJson = fieldsRes && fieldsRes.ok ? await fieldsRes.json() : { results: [] };
         setFields(Array.isArray(fieldsJson?.results) ? fieldsJson.results : fieldsJson || []);
       } catch {}
     })();
-  }, []);
+  }, [dateRange]);
 
   const filteredFields = useMemo(() => {
     if (!dateRange.start && !dateRange.end) return fields;
@@ -91,9 +90,9 @@ export default function AdminAnalytics() {
   }, [filteredFields]);
 
   const revenueTrend = useMemo(() => {
-    // Always prefer adminAnalytics revenue_by_day if available (already net of refunds and filled for 7 days)
-    if (adminAnalytics && Array.isArray(adminAnalytics.revenue_by_day) && adminAnalytics.revenue_by_day.length > 0) {
-      return adminAnalytics.revenue_by_day.map((r:any) => ({ 
+    // Use summary revenue_by_day if available (from filtered API call)
+    if (summary && Array.isArray(summary.revenue_by_day) && summary.revenue_by_day.length > 0) {
+      return summary.revenue_by_day.map((r:any) => ({ 
         month: r.name || r.day || '', 
         revenue: Number(r.value || r.amount || 0) 
       }));
@@ -109,7 +108,7 @@ export default function AdminAnalytics() {
       }
     });
     return Object.keys(revByMonth).sort().map(m => ({ month: m, revenue: revByMonth[m] }));
-  }, [adminAnalytics, filteredTx]);
+  }, [summary, filteredTx]);
 
   const cropDistribution = useMemo(() => {
     const map: Record<string, number> = {};

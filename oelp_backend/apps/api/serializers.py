@@ -299,11 +299,15 @@ class SoilTextureSerializer(serializers.ModelSerializer):
 
 
 class SoilReportSerializer(serializers.ModelSerializer):
+    field_name = serializers.CharField(source="field.name", read_only=True)
+    soil_type_name = serializers.CharField(source="soil_type.name", read_only=True)
+    
     class Meta:
         model = SoilReport
         fields = (
             "id",
             "field",
+            "field_name",
             "ph",
             "ec",
             "nitrogen",
@@ -315,7 +319,9 @@ class SoilReportSerializer(serializers.ModelSerializer):
             "zinc",
             "manganese",
             "soil_type",
+            "soil_type_name",
             "report_link",
+            "created_at",
         )
 
 

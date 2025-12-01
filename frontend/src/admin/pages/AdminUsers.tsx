@@ -209,21 +209,6 @@ export default function AdminUsers() {
           <p className="text-muted-foreground">Manage users and administrators</p>
         </div>
         <div className="flex items-center gap-2">
-          {(me?.roles||[]).includes('SuperAdmin') && (
-            <Button
-              variant="outline"
-              onClick={async () => {
-                const res = await fetch(`${API_URL}/admin/users/dedupe-roles-bulk/`, { method: 'POST', headers: { Authorization: `Token ${token}` } });
-                if (res.ok) {
-                  const d = await res.json().catch(() => ({}));
-                  toast.success(`Deduped roles${d?.removed !== undefined ? `, removed ${d.removed}` : ''}`);
-                  loadUsers();
-                } else {
-                  toast.error('Failed to dedupe roles');
-                }
-              }}
-            >Dedupe Roles</Button>
-          )}
           <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button>
