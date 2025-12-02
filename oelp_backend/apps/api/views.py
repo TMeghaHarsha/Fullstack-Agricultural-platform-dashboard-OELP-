@@ -1016,7 +1016,26 @@ class SoilReportViewSet(viewsets.ModelViewSet):
     serializer_class = SoilReportSerializer
     filterset_fields = ["field", "soil_type"]
 
+    def get_queryset(self):
+        """Filter soil reports to only show user's own reports unless they have privileged access"""
+        user = self.request.user
+        try:
+            role_names = set(user.user_roles.select_related("role").values_list("role__name", flat=True))
+        except Exception:
+            role_names = set()
+        privileged = user.is_superuser or bool({"SuperAdmin", "Admin", "Agronomist", "Analyst"} & role_names)
+        
+        if privileged:
+            return SoilReport.objects.select_related("field", "soil_type").order_by("-id")
+        return SoilReport.objects.filter(field__user=user).select_related("field", "soil_type").order_by("-id")
+
     def perform_create(self, serializer):
+        """Ensure the field belongs to the user"""
+        field_id = serializer.validated_data.get("field")
+        if field_id and field_id.user != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You can only create soil reports for your own fields.")
+        
         report = serializer.save()
         # Set a convenient report link to the PDF export filtered by field
         try:
@@ -2084,12 +2103,27 @@ class ExportCSVView(APIView):
         
         # Analytics section if requested
         if include_analytics:
-            from .views import AnalyticsSummaryView
-            analytics_view = AnalyticsSummaryView()
-            analytics_view.request = request
-            analytics_view.request.user = resolved_user
             try:
-                analytics_data = analytics_view.get(request).data
+                # Directly compute analytics instead of using view to avoid circular import
+                from django.db.models import Count
+                from apps.models_app.field import Field, FieldIrrigationMethod, FieldIrrigationPractice
+                
+                # Crop distribution
+                crop_counts = Field.objects.filter(user=resolved_user).values("crop__name").annotate(cnt=Count("id")).order_by("-cnt")
+                crop_distribution = [{"name": (row["crop__name"] or "Unassigned"), "value": row["cnt"]} for row in crop_counts]
+                
+                # Irrigation distribution
+                irrigation_counts = FieldIrrigationMethod.objects.filter(field__user=resolved_user).values("irrigation_method__name").annotate(cnt=Count("id")).order_by("-cnt")
+                irrigation_distribution = [{"name": (row["irrigation_method__name"] or "Unspecified"), "value": row["cnt"]} for row in irrigation_counts]
+                if not irrigation_distribution:
+                    practice_counts = FieldIrrigationPractice.objects.filter(field__user=resolved_user).values("irrigation_method__name").annotate(cnt=Count("id")).order_by("-cnt")
+                    irrigation_distribution = [{"name": (row["irrigation_method__name"] or "Unspecified"), "value": row["cnt"]} for row in practice_counts]
+                
+                analytics_data = {
+                    "crop_distribution": crop_distribution,
+                    "irrigation_distribution": irrigation_distribution,
+                }
+                
                 writer.writerow(["ANALYTICS SUMMARY"])
                 
                 if analytics_data.get("crop_distribution"):
@@ -2105,14 +2139,9 @@ class ExportCSVView(APIView):
                     for item in analytics_data["irrigation_distribution"]:
                         writer.writerow([item.get("name", "-"), item.get("value", 0)])
                     writer.writerow([])
-                
-                if analytics_data.get("lifecycle_completion"):
-                    writer.writerow(["Lifecycle Completion"])
-                    writer.writerow(["Status", "Count"])
-                    for item in analytics_data["lifecycle_completion"]:
-                        writer.writerow([item.get("name", "-"), item.get("value", 0)])
-                    writer.writerow([])
-            except Exception:
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
                 pass
         
         writer.writerow([])
@@ -2322,12 +2351,26 @@ class ExportPDFView(APIView):
         
         # Analytics section if requested
         if analytics_params:
-            from .views import AnalyticsSummaryView
-            analytics_view = AnalyticsSummaryView()
-            analytics_view.request = request
-            analytics_view.request.user = resolved_user
             try:
-                analytics_data = analytics_view.get(request).data
+                # Directly compute analytics instead of using view to avoid circular import
+                from django.db.models import Count
+                from apps.models_app.field import Field, FieldIrrigationMethod, FieldIrrigationPractice
+                
+                # Crop distribution
+                crop_counts = Field.objects.filter(user=resolved_user).values("crop__name").annotate(cnt=Count("id")).order_by("-cnt")
+                crop_distribution = [{"name": (row["crop__name"] or "Unassigned"), "value": row["cnt"]} for row in crop_counts]
+                
+                # Irrigation distribution
+                irrigation_counts = FieldIrrigationMethod.objects.filter(field__user=resolved_user).values("irrigation_method__name").annotate(cnt=Count("id")).order_by("-cnt")
+                irrigation_distribution = [{"name": (row["irrigation_method__name"] or "Unspecified"), "value": row["cnt"]} for row in irrigation_counts]
+                if not irrigation_distribution:
+                    practice_counts = FieldIrrigationPractice.objects.filter(field__user=resolved_user).values("irrigation_method__name").annotate(cnt=Count("id")).order_by("-cnt")
+                    irrigation_distribution = [{"name": (row["irrigation_method__name"] or "Unspecified"), "value": row["cnt"]} for row in practice_counts]
+                
+                analytics_data = {
+                    "crop_distribution": crop_distribution,
+                    "irrigation_distribution": irrigation_distribution,
+                }
                 
                 if y < 200:
                     p.showPage()

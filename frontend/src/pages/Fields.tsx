@@ -470,13 +470,42 @@ const Fields = () => {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setOpenSoilReportDialog(false)}>Cancel</Button>
               <Button onClick={async () => {
-                if (!soilForm.field || !soilForm.ph || !soilForm.ec || !soilForm.soil_type) { toast.error("Fill all required fields"); return; }
-                const res = await fetch(`${API_URL}/soil-reports/`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", ...authHeaders() },
-                  body: JSON.stringify({ field: Number(soilForm.field), ph: Number(soilForm.ph), ec: Number(soilForm.ec), soil_type: Number(soilForm.soil_type) }),
-                });
-                if (res.ok) { toast.success("Soil report created"); setOpenSoilReportDialog(false); } else { toast.error("Failed to create report"); }
+                if (!soilForm.field || !soilForm.ph || !soilForm.ec || !soilForm.soil_type) { 
+                  toast.error("Fill all required fields"); 
+                  return; 
+                }
+                try {
+                  const res = await fetch(`${API_URL}/soil-reports/`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", ...authHeaders() },
+                    body: JSON.stringify({ 
+                      field: Number(soilForm.field), 
+                      ph: Number(soilForm.ph), 
+                      ec: Number(soilForm.ec), 
+                      soil_type: Number(soilForm.soil_type) 
+                    }),
+                  });
+                  if (res.ok) { 
+                    toast.success("Soil report created successfully"); 
+                    setOpenSoilReportDialog(false);
+                    setSoilForm({ field: "", ph: "", ec: "", soil_type: "" });
+                    // Reload fields list to refresh data
+                    const fieldsRes = await fetch(`${API_URL}/fields/`, { headers: authHeaders() });
+                    if (fieldsRes.ok) {
+                      const fieldsData = await fieldsRes.json();
+                      const fieldsArr = Array.isArray(fieldsData?.results) ? fieldsData.results : (Array.isArray(fieldsData) ? fieldsData : []);
+                      setFields(fieldsArr);
+                    }
+                  } else { 
+                    const errorData = await res.json().catch(() => ({}));
+                    const errorMsg = errorData.detail || errorData.message || errorData.error || "Failed to create report";
+                    toast.error(errorMsg);
+                    console.error("Soil report creation error:", errorData);
+                  }
+                } catch (error: any) {
+                  toast.error(`Error: ${error.message || "Failed to create report"}`);
+                  console.error("Soil report creation exception:", error);
+                }
               }}>Generate</Button>
             </div>
           </div>

@@ -3,7 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Download, FileDown, TrendingUp } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Download, FileDown, TrendingUp, Search } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -22,11 +23,15 @@ const Reports = () => {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [analytics, setAnalytics] = useState<any | null>(null);
   const [fieldsData, setFieldsData] = useState<any[]>([]);
+  const [soilReports, setSoilReports] = useState<any[]>([]);
   const [openExport, setOpenExport] = useState(false);
   const [exportType, setExportType] = useState<"csv" | "pdf">("pdf");
   const [selectedAnalytics, setSelectedAnalytics] = useState<Record<string, boolean>>({ crop_distribution: true, irrigation_distribution: true, fields_over_time: true, plan_mix: true });
   const [userPlan, setUserPlan] = useState<any | null>(null);
   const [hasAdvancedAnalytics, setHasAdvancedAnalytics] = useState(false);
+  const [filters, setFilters] = useState<{ crop?: string; region?: string; date_from?: string; date_to?: string }>({});
+  const [filteredAnalytics, setFilteredAnalytics] = useState<any | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const stats = [
     { title: "Lifecycle Completion", value: analytics ? `${formatLifecyclePercent(analytics.lifecycle_completion)}` : "0%", change: "" },
     { title: "Active Reports", value: analytics && analytics.has_data ? String((analytics.crop_distribution || []).reduce((a:number,b:any)=>a+b.value,0)) : "0", subtitle: "" },
@@ -77,11 +82,12 @@ const Reports = () => {
     const fetchIt = async () => {
       try {
         // Fetch all data in parallel
-        const [analyticsRes, fieldsRes, cropsRes, plansRes] = await Promise.all([
+        const [analyticsRes, fieldsRes, cropsRes, plansRes, soilReportsRes] = await Promise.all([
           fetch(`${API_URL}/analytics/summary/`, { headers: authHeaders }),
           fetch(`${API_URL}/fields/`, { headers: authHeaders }),
           fetch(`${API_URL}/crops/`, { headers: authHeaders }),
-          fetch(`${API_URL}/subscriptions/user/`, { headers: authHeaders })
+          fetch(`${API_URL}/subscriptions/user/`, { headers: authHeaders }),
+          fetch(`${API_URL}/soil-reports/`, { headers: authHeaders }).catch(() => null)
         ]);
         
         const analyticsData = await analyticsRes.json();
@@ -142,12 +148,41 @@ const Reports = () => {
         }
         setFieldsData(fields);
         setExtra({ planMix, fieldsOverTime });
+        
+        // Load soil reports
+        if (soilReportsRes && soilReportsRes.ok) {
+          const soilData = await soilReportsRes.json();
+          const soilArr = Array.isArray(soilData?.results) ? soilData.results : (Array.isArray(soilData) ? soilData : []);
+          setSoilReports(soilArr);
+        }
       } catch (error) {
         console.error('Error fetching analytics:', error);
       }
     };
     fetchIt();
   }, []);
+
+  const viewAnalytics = async () => {
+    setLoadingAnalytics(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+      const params = new URLSearchParams();
+      if (filters.crop) params.set("crop", filters.crop);
+      if (filters.region) params.set("region", filters.region);
+      if (filters.date_from) params.set("date_from", filters.date_from);
+      if (filters.date_to) params.set("date_to", filters.date_to);
+      const url = `${API_URL}/analytics/summary/${params.toString() ? `?${params.toString()}` : ""}`;
+      const res = await fetch(url, { headers: { Authorization: `Token ${token}` } });
+      const data = res.ok ? await res.json() : null;
+      setFilteredAnalytics(data || null);
+    } catch (error) {
+      console.error('Error fetching filtered analytics:', error);
+      setFilteredAnalytics(null);
+    } finally {
+      setLoadingAnalytics(false);
+    }
+  };
 
   const getHealthColor = (health: string) => {
     switch (health) {
@@ -333,6 +368,142 @@ const Reports = () => {
         </Card>
       )}
 
+      {/* Filters and View Analytics */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters & Analytics</CardTitle>
+          <CardDescription>Apply filters and view filtered analytics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-4">
+            <div>
+              <label className="text-xs text-muted-foreground">Crop</label>
+              <Input placeholder="e.g., Wheat" value={filters.crop || ""} onChange={(e)=> setFilters({...filters, crop: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Region</label>
+              <Input placeholder="e.g., West" value={filters.region || ""} onChange={(e)=> setFilters({...filters, region: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">From</label>
+              <Input type="date" value={filters.date_from || ""} onChange={(e)=> setFilters({...filters, date_from: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">To</label>
+              <Input type="date" value={filters.date_to || ""} onChange={(e)=> setFilters({...filters, date_to: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex justify-end mt-3">
+            <Button onClick={viewAnalytics} disabled={loadingAnalytics}>
+              <Search className="mr-2 h-4 w-4" /> {loadingAnalytics ? "Loading..." : "View Analytics"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Filtered Analytics Display */}
+      {filteredAnalytics && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {filteredAnalytics.crop_distribution && filteredAnalytics.crop_distribution.length > 0 ? (
+            <Card>
+              <CardHeader><CardTitle>Filtered Crop Distribution</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={filteredAnalytics.crop_distribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {filteredAnalytics.crop_distribution.map((_: any, idx: number) => (
+                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader><CardTitle>Filtered Crop Distribution</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground text-center py-8">No data available for the selected filters.</p>
+              </CardContent>
+            </Card>
+          )}
+          {filteredAnalytics.irrigation_distribution && filteredAnalytics.irrigation_distribution.length > 0 ? (
+            <Card>
+              <CardHeader><CardTitle>Filtered Irrigation Distribution</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={filteredAnalytics.irrigation_distribution} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {filteredAnalytics.irrigation_distribution.map((_: any, idx: number) => (
+                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader><CardTitle>Filtered Irrigation Distribution</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground text-center py-8">No data available for the selected filters.</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Recent Reports Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Soil Reports</CardTitle>
+          <CardDescription>Latest generated soil analysis reports ({soilReports.length} total)</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {soilReports.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No soil reports available yet. Generate soil reports from the Fields page.</div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Field</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>pH</TableHead>
+                    <TableHead>EC</TableHead>
+                    <TableHead>Soil Type</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {soilReports.slice(0, 10).map((r:any) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.id}</TableCell>
+                      <TableCell>{r.field_name || (typeof r.field === 'object' ? r.field?.name : String(r.field || '-')) || '-'}</TableCell>
+                      <TableCell>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell>{r.ph != null ? r.ph.toFixed(2) : '-'}</TableCell>
+                      <TableCell>{r.ec != null ? r.ec.toFixed(2) : '-'}</TableCell>
+                      <TableCell>{r.soil_type_name || (typeof r.soil_type === 'object' ? r.soil_type?.name : String(r.soil_type || '-')) || '-'}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          const fieldId = typeof r.field === 'object' ? r.field?.id : r.field;
+                          const url = `${API_URL}/reports/export/pdf/?field_id=${fieldId}${token ? `&token=${token}` : ''}`;
+                          window.open(url, "_blank");
+                        }}>
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Export Dialog */}
       <Dialog open={openExport} onOpenChange={setOpenExport}>
