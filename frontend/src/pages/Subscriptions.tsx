@@ -180,8 +180,8 @@ const Subscriptions = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Subscriptions</h1>
-        <p className="text-muted-foreground">Manage your subscription plans and billing</p>
+        <h1 className="text-2xl sm:text-3xl font-bold">Subscriptions</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Manage your subscription plans and billing</p>
       </div>
 
       <Card className="border-primary/50">
@@ -316,6 +316,7 @@ const Subscriptions = () => {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -603,6 +604,9 @@ const Subscriptions = () => {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Why are you downgrading?</DialogTitle>
+            <DialogDescription>
+              Help us understand why you're downgrading. Your feedback helps us improve.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
