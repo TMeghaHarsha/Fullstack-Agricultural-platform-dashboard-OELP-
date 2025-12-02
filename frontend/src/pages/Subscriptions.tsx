@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -209,8 +209,8 @@ const Subscriptions = () => {
       </Card>
 
       <div>
-        <h2 className="text-2xl font-bold mb-4">Available Plans</h2>
-        <div className="grid gap-4 md:grid-cols-3">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4">Available Plans</h2>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {plans.map((plan) => (
             <Card key={plan.id}>
               <CardHeader>
@@ -255,7 +255,7 @@ const Subscriptions = () => {
         <CardContent>
           {paymentMethods.length === 0 && <p className="text-sm text-muted-foreground">No payment methods added.</p>}
           {paymentMethods.map((pm) => (
-            <div key={pm.id} className="flex items-center justify-between p-4 border rounded-lg mb-2">
+            <div key={pm.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-4 border rounded-lg mb-2">
               <div className="flex items-center gap-3">
                 <CreditCard className="h-6 w-6" />
                 <div>
@@ -263,7 +263,7 @@ const Subscriptions = () => {
                   <p className="text-sm text-muted-foreground">Expires {pm.exp_month}/{pm.exp_year}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end sm:justify-start">
                 <Button variant="ghost" size="sm" onClick={() => setShowPmDetails({ open: true, pm })}>View</Button>
                 {pm.is_primary && <Badge variant="secondary">Primary</Badge>}
                 <Button variant="outline" size="sm" onClick={async () => {
@@ -284,6 +284,7 @@ const Subscriptions = () => {
           <CardDescription>Your past invoices and payments</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -324,13 +325,16 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Payment Method</DialogTitle>
+            <DialogDescription>
+              Add a new payment method to your account
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
               <Label>Brand</Label>
               <Input value={card.brand} onChange={(e) => setCard({ ...card, brand: e.target.value })} />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div className="space-y-2">
                 <Label>Last 4</Label>
                 <Input maxLength={4} value={card.last4} onChange={(e) => setCard({ ...card, last4: e.target.value.replace(/[^0-9]/g, "") })} />
@@ -356,6 +360,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{showPlanDialog.plan?.name || 'Choose a Plan'}</DialogTitle>
+            <DialogDescription>
+              {showPlanDialog.plan ? `Subscribe to ${showPlanDialog.plan.name} plan` : "Select a subscription plan that fits your needs"}
+            </DialogDescription>
           </DialogHeader>
           {!showPlanDialog.plan && (
             <div className="space-y-3">
@@ -475,6 +482,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Select a saved card</DialogTitle>
+            <DialogDescription>
+              Choose a payment method to complete your subscription
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             {paymentMethods.map((pm) => (
@@ -571,6 +581,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Card details</DialogTitle>
+            <DialogDescription>
+              View details of your saved payment method
+            </DialogDescription>
           </DialogHeader>
           {showPmDetails.pm && (
             <div className="space-y-2">

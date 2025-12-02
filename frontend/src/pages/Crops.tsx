@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -301,6 +302,9 @@ const Crops = () => {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingField ? "Update Crop" : "Assign Crop to Field"}</DialogTitle>
+            <DialogDescription>
+              {editingField ? "Update crop assignment details" : "Assign a crop to a field and set lifecycle dates"}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -351,6 +355,9 @@ const Crops = () => {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Crop Details</DialogTitle>
+            <DialogDescription>
+              View detailed information about the crop assignment
+            </DialogDescription>
           </DialogHeader>
           {detailsField && (
             <div className="space-y-2 text-sm">

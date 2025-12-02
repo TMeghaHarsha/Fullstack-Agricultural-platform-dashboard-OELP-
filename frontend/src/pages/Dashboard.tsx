@@ -169,7 +169,7 @@ const Dashboard = () => {
           <CardDescription>Common tasks</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Button variant="outline" className="h-24 flex-col gap-2" onClick={() => navigate('/crops?dialog=add')}>
               <Plus className="h-5 w-5" />
               <span>Add New Crop</span>

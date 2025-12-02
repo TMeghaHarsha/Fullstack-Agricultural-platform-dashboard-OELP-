@@ -1031,18 +1031,40 @@ class SoilReportViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Ensure the field belongs to the user"""
-        field_id = serializer.validated_data.get("field")
-        if field_id and field_id.user != self.request.user:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("You can only create soil reports for your own fields.")
+        from apps.models_app.field import Field
+        from rest_framework.exceptions import PermissionDenied, NotFound
         
-        report = serializer.save()
-        # Set a convenient report link to the PDF export filtered by field
-        try:
-            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
-            report.save(update_fields=["report_link"])
-        except Exception:
+        field = serializer.validated_data.get("field")
+        # Field can be either an ID (int) or a Field object
+        if isinstance(field, int):
+            try:
+                field_obj = Field.objects.select_related("user").get(pk=field)
+            except Field.DoesNotExist:
+                raise NotFound("Field not found.")
+            field = field_obj
+        
+        # Check if field belongs to user
+        if field and hasattr(field, 'user'):
+            if field.user != self.request.user:
+                raise PermissionDenied("You can only create soil reports for your own fields.")
+        else:
+            # If field doesn't have user attribute, it might be a new object
+            # In that case, the serializer should handle it
             pass
+        
+        try:
+            report = serializer.save()
+            # Set a convenient report link to the PDF export filtered by field
+            try:
+                report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
+                report.save(update_fields=["report_link"])
+            except Exception:
+                pass
+        except Exception as e:
+            # Log the error for debugging
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 class SoilTextureViewSet(viewsets.ModelViewSet):
@@ -2228,13 +2250,18 @@ class ExportPDFView(APIView):
             y -= 10
         
         # Fields section
-        queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
-        if field_id:
-            queryset = queryset.filter(pk=field_id)
-        if start_date:
-            queryset = queryset.filter(updated_at__date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(updated_at__date__lte=end_date)
+        try:
+            queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
+            if field_id:
+                queryset = queryset.filter(pk=field_id)
+            if start_date:
+                queryset = queryset.filter(updated_at__date__gte=start_date)
+            if end_date:
+                queryset = queryset.filter(updated_at__date__lte=end_date)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            queryset = Field.objects.none()
         
         fields_list = list(queryset)
         

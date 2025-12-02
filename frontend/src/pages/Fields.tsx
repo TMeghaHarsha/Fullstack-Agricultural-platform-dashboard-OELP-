@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
@@ -122,7 +122,7 @@ const Fields = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -194,6 +194,7 @@ const Fields = () => {
               ))}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -236,6 +237,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editingField ? "Edit Field" : "Add Field"}</DialogTitle>
+            <DialogDescription>
+              {editingField ? "Update field information" : "Add a new field to your farm"}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -355,6 +359,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Field Details</DialogTitle>
+            <DialogDescription>
+              View detailed information about this field
+            </DialogDescription>
           </DialogHeader>
           {detailsField && (
             <div className="space-y-2 text-sm">
@@ -378,6 +385,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record Irrigation Practice</DialogTitle>
+            <DialogDescription>
+              Record irrigation activities for the selected field
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -441,6 +451,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Generate Soil Report</DialogTitle>
+            <DialogDescription>
+              Enter soil analysis data for the selected field. All fields are required.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -450,7 +463,7 @@ const Fields = () => {
                 {fields.map((f) => (<option key={f.id} value={f.id}>{f.name}</option>))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-2">
                 <Label>pH</Label>
                 <Input type="number" step="0.01" value={soilForm.ph} onChange={(e) => setSoilForm({ ...soilForm, ph: e.target.value })} />
@@ -526,6 +539,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Schedule Irrigation</DialogTitle>
+            <DialogDescription>
+              Schedule future irrigation activities for your field
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -587,6 +603,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Farm</DialogTitle>
+            <DialogDescription>
+              Create a new farm to organize your fields
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -637,6 +656,9 @@ function SoilAnalysisDialog({ open, onOpenChange, API_URL, fields, authHeaders }
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Soil Analysis</DialogTitle>
+          <DialogDescription>
+            View soil analysis reports for the selected field
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">

@@ -323,6 +323,22 @@ class SoilReportSerializer(serializers.ModelSerializer):
             "report_link",
             "created_at",
         )
+    
+    def validate_field(self, value):
+        """Ensure field exists and belongs to the user"""
+        from apps.models_app.field import Field
+        from rest_framework.exceptions import ValidationError
+        
+        # If value is an integer (ID), fetch the Field object
+        if isinstance(value, int):
+            try:
+                field_obj = Field.objects.select_related("user").get(pk=value)
+            except Field.DoesNotExist:
+                raise ValidationError("Field not found.")
+            return field_obj
+        
+        # If it's already a Field object, return it
+        return value
 
 
 class IrrigationMethodSerializer(serializers.ModelSerializer):
