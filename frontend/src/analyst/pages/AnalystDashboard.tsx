@@ -25,6 +25,27 @@ export default function AnalystDashboard() {
   const [unread, setUnread] = useState(0);
   const [summary, setSummary] = useState<any | null>(null);
 
+  const loadUnreadCount = () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    // Fetch unread count from notifications endpoint
+    Promise.all([
+      fetch(`${API_URL}/notifications/unread_count/`, { headers: { Authorization: `Token ${token}` } }),
+      fetch(`${API_URL}/dashboard/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null)
+    ])
+      .then(([countRes, dashRes]) => {
+        if (countRes.ok) {
+          return countRes.json().then(d => Number(d.count || d.unread_count || 0));
+        }
+        if (dashRes && dashRes.ok) {
+          return dashRes.json().then(d => Number(d?.unread_notifications || 0));
+        }
+        return 0;
+      })
+      .then(count => setUnread(count))
+      .catch(() => setUnread(0));
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -42,16 +63,34 @@ export default function AnalystDashboard() {
         const arr = Array.isArray(d?.results) ? d.results : (Array.isArray(d) ? d : []);
         setFieldsCount(arr.length);
       }).catch(() => setFieldsCount(0));
-    // Unread notifications from dashboard endpoint
-    fetch(`${API_URL}/dashboard/`, { headers: { Authorization: `Token ${token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setUnread(Number(d?.unread_notifications) || 0))
-      .catch(() => setUnread(0));
+    // Load unread notifications
+    loadUnreadCount();
     // Analytics summary for charts
     fetch(`${API_URL}/analytics/summary/`, { headers: { Authorization: `Token ${token}` } })
       .then(r => r.ok ? r.json() : null)
       .then(d => setSummary(d || null))
       .catch(() => setSummary(null));
+    
+    // Set up interval to refresh unread count
+    const interval = setInterval(loadUnreadCount, 30000); // Every 30 seconds
+    
+    // Also listen for storage events (when notifications are marked as read in other tabs)
+    const handleStorageChange = () => {
+      loadUnreadCount();
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Listen for custom event when notifications are read
+    const handleNotificationRead = () => {
+      loadUnreadCount();
+    };
+    window.addEventListener('notificationRead', handleNotificationRead);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('notificationRead', handleNotificationRead);
+    };
   }, []);
 
   const chart1 = useMemo(() => {

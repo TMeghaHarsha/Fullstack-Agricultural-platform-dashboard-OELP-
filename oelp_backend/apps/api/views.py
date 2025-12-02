@@ -1607,34 +1607,137 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
         if not txn:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Generate a simple invoice PDF on the fly
+        # Generate a professional invoice PDF
         try:
             from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib import colors
         except Exception:
             return Response({"detail": "reportlab not installed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         import io
         buffer = io.BytesIO()
-        p = canvas.Canvas(buffer)
-        p.setTitle("Invoice")
-        y = 800
-        p.drawString(100, y, "Invoice")
+        p = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+        
+        # Header
+        p.setFont("Helvetica-Bold", 24)
+        p.setFillColor(colors.HexColor("#1a5f3f"))
+        p.drawString(50, height - 60, "OELP Agricultural Platform")
+        p.setFont("Helvetica", 14)
+        p.setFillColor(colors.black)
+        p.drawString(50, height - 85, "INVOICE")
+        
+        # Invoice details
+        y = height - 130
+        p.setFont("Helvetica-Bold", 10)
+        p.setFillColor(colors.HexColor("#2d5a3d"))
+        p.drawString(50, y, "Invoice Details")
         y -= 20
-        p.drawString(100, y, f"Transaction ID: {txn.id}")
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+        p.drawString(50, y, f"Invoice Number: INV-{txn.id:06d}")
+        y -= 15
+        p.drawString(50, y, f"Date: {txn.created_at.strftime('%B %d, %Y') if hasattr(txn, 'created_at') and txn.created_at else datetime.now().strftime('%B %d, %Y')}")
+        y -= 15
+        p.drawString(50, y, f"Transaction ID: {txn.id}")
+        y -= 15
+        p.drawString(50, y, f"Status: {txn.status.upper()}")
+        
+        # Customer information
+        y = height - 130
+        p.setFont("Helvetica-Bold", 10)
+        p.setFillColor(colors.HexColor("#2d5a3d"))
+        p.drawString(350, y, "Bill To")
         y -= 20
-        p.drawString(100, y, f"User: {txn.user.username}")
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+        p.drawString(350, y, txn.user.full_name or txn.user.username)
+        y -= 15
+        p.drawString(350, y, txn.user.email or "")
+        y -= 15
+        if hasattr(txn.user, 'phone_number') and txn.user.phone_number:
+            p.drawString(350, y, f"Phone: {txn.user.phone_number}")
+        
+        # Line separator
+        y = height - 250
+        p.setStrokeColor(colors.HexColor("#1a5f3f"))
+        p.setLineWidth(2)
+        p.line(50, y, width - 50, y)
         y -= 20
-        p.drawString(100, y, f"Plan: {getattr(txn.plan, 'name', '-')}")
+        
+        # Items table header
+        p.setFont("Helvetica-Bold", 11)
+        p.setFillColor(colors.HexColor("#1a5f3f"))
+        p.drawString(50, y, "Description")
+        p.drawString(300, y, "Quantity")
+        p.drawString(400, y, "Unit Price")
+        p.drawString(500, y, "Total")
+        y -= 15
+        p.setStrokeColor(colors.grey)
+        p.setLineWidth(1)
+        p.line(50, y, width - 50, y)
         y -= 20
-        p.drawString(100, y, f"Amount: {txn.amount} {txn.currency}")
+        
+        # Item row
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+        plan_name = getattr(txn.plan, 'name', 'Subscription Plan')
+        duration = getattr(txn.plan, 'duration', 30)
+        p.drawString(50, y, f"{plan_name} - {duration} days")
+        p.drawString(300, y, "1")
+        p.drawString(400, y, f"{txn.amount} {txn.currency}")
+        p.drawString(500, y, f"{txn.amount} {txn.currency}")
+        y -= 30
+        
+        # Totals
+        p.setStrokeColor(colors.grey)
+        p.line(400, y, width - 50, y)
+        y -= 15
+        p.setFont("Helvetica-Bold", 11)
+        p.setFillColor(colors.HexColor("#1a5f3f"))
+        p.drawString(400, y, "Subtotal:")
+        p.drawString(500, y, f"{txn.amount} {txn.currency}")
+        y -= 15
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+        p.drawString(400, y, "Tax:")
+        p.drawString(500, y, "0.00")
+        y -= 15
+        p.setFont("Helvetica-Bold", 12)
+        p.setFillColor(colors.HexColor("#1a5f3f"))
+        p.drawString(400, y, "Total:")
+        p.drawString(500, y, f"{txn.amount} {txn.currency}")
+        y -= 30
+        
+        # Payment information
+        p.setFont("Helvetica-Bold", 10)
+        p.setFillColor(colors.HexColor("#2d5a3d"))
+        p.drawString(50, y, "Payment Information")
         y -= 20
-        p.drawString(100, y, f"Status: {txn.status}")
-        y -= 40
-        p.drawString(100, y, "Thank you for your purchase.")
+        p.setFont("Helvetica", 10)
+        p.setFillColor(colors.black)
+        p.drawString(50, y, f"Payment Method: {getattr(txn, 'payment_method', 'Online Payment')}")
+        y -= 15
+        p.drawString(50, y, f"Payment Status: {txn.status.upper()}")
+        if hasattr(txn, 'paid_at') and txn.paid_at:
+            y -= 15
+            p.drawString(50, y, f"Paid On: {txn.paid_at.strftime('%B %d, %Y')}")
+        
+        # Footer
+        y = 100
+        p.setFont("Helvetica", 9)
+        p.setFillColor(colors.grey)
+        p.drawString(50, y, "Thank you for your business!")
+        y -= 15
+        p.drawString(50, y, "For questions about this invoice, please contact support@oelp.com")
+        y -= 15
+        p.drawString(50, y, "OELP Agricultural Platform - Empowering farmers with technology")
+        
         p.showPage()
         p.save()
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = f"attachment; filename=invoice_{txn.id}.pdf"
+        response["Content-Disposition"] = f"attachment; filename=invoice_{txn.id}_{datetime.now().strftime('%Y%m%d')}.pdf"
         return response
 
 class RecentSubscriptionsView(APIView):
@@ -1887,6 +1990,7 @@ class ExportCSVView(APIView):
             resolved_user = None
         if resolved_user is None:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        
         # Optional date filters (YYYY-MM-DD)
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
@@ -1901,46 +2005,123 @@ class ExportCSVView(APIView):
         except Exception:
             pass
 
+        # Get analytics if requested
+        analytics_params = request.query_params.getlist("analytics")
+        include_analytics = bool(analytics_params)
+
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(["Field", "Crop", "Hectares"])
-        queryset = Field.objects.filter(user=resolved_user)
-        if resolved_user is None:
-            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-        # Minimal PDF export with optional date filter
-        start_date_str = request.query_params.get("start_date")
-        end_date_str = request.query_params.get("end_date")
-        field_id = request.query_params.get("field_id") or request.query_params.get("field")
-        start_date = None
-        end_date = None
-        try:
-            if start_date_str:
-                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-            if end_date_str:
-                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-        except Exception:
-            pass
-        from reportlab.pdfgen import canvas
-
-        buffer = io.BytesIO()
-        p = canvas.Canvas(buffer)
-        p.drawString(100, 800, "OELP Report")
-        y = 760
-        queryset = Field.objects.filter(user=resolved_user)
+        
+        # Header section
+        writer.writerow(["OELP Agricultural Platform - Comprehensive Report"])
+        writer.writerow([f"Generated for: {resolved_user.full_name or resolved_user.username}"])
+        writer.writerow([f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"])
+        if start_date or end_date:
+            writer.writerow([f"Date Range: {start_date or 'All'} to {end_date or 'All'}"])
+        writer.writerow([])
+        
+        # Fields data
+        queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
         if field_id:
             queryset = queryset.filter(pk=field_id)
         if start_date:
             queryset = queryset.filter(updated_at__date__gte=start_date)
         if end_date:
             queryset = queryset.filter(updated_at__date__lte=end_date)
-        for fld in queryset[:30]:
-            p.drawString(100, y, f"Field: {fld.name}")
-            y -= 20
-        p.showPage()
-        p.save()
+        
+        writer.writerow(["FIELD DETAILS"])
+        writer.writerow(["Field Name", "Farm", "Crop", "Crop Variety", "Location", "Area (Acres)", "Soil Type", "Irrigation Method", "Status", "Created Date"])
+        
+        for fld in queryset:
+            # Get irrigation method
+            irrigation_name = "Not Set"
+            try:
+                fim = FieldIrrigationMethod.objects.filter(field=fld).select_related("irrigation_method").first()
+                if fim and fim.irrigation_method:
+                    irrigation_name = fim.irrigation_method.name
+            except Exception:
+                pass
+            
+            writer.writerow([
+                fld.name or "-",
+                fld.farm.name if fld.farm else "-",
+                fld.crop.name if fld.crop else "-",
+                fld.crop_variety.name if fld.crop_variety else "-",
+                fld.location_name or "-",
+                f"{fld.area:.2f}" if fld.area else "-",
+                fld.soil_type.name if fld.soil_type else "-",
+                irrigation_name,
+                "Active" if fld.is_active else "Inactive",
+                fld.created_at.strftime("%Y-%m-%d") if fld.created_at else "-"
+            ])
+        
+        writer.writerow([])
+        
+        # Soil Reports section
+        soil_queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
+        if field_id:
+            soil_queryset = soil_queryset.filter(field_id=field_id)
+        if start_date:
+            soil_queryset = soil_queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            soil_queryset = soil_queryset.filter(created_at__date__lte=end_date)
+        
+        if soil_queryset.exists():
+            writer.writerow(["SOIL ANALYSIS REPORTS"])
+            writer.writerow(["Field", "pH", "EC", "Nitrogen", "Phosphorous", "Potassium", "Soil Type", "Report Date"])
+            for report in soil_queryset[:50]:
+                writer.writerow([
+                    report.field.name if report.field else "-",
+                    f"{report.ph:.2f}" if report.ph else "-",
+                    f"{report.ec:.2f}" if report.ec else "-",
+                    f"{report.nitrogen:.2f}" if report.nitrogen else "-",
+                    f"{report.phosphorous:.2f}" if report.phosphorous else "-",
+                    f"{report.potassium:.2f}" if report.potassium else "-",
+                    report.soil_type.name if report.soil_type else "-",
+                    report.created_at.strftime("%Y-%m-%d") if report.created_at else "-"
+                ])
+            writer.writerow([])
+        
+        # Analytics section if requested
+        if include_analytics:
+            from .views import AnalyticsSummaryView
+            analytics_view = AnalyticsSummaryView()
+            analytics_view.request = request
+            analytics_view.request.user = resolved_user
+            try:
+                analytics_data = analytics_view.get(request).data
+                writer.writerow(["ANALYTICS SUMMARY"])
+                
+                if analytics_data.get("crop_distribution"):
+                    writer.writerow(["Crop Distribution"])
+                    writer.writerow(["Crop", "Count"])
+                    for item in analytics_data["crop_distribution"]:
+                        writer.writerow([item.get("name", "-"), item.get("value", 0)])
+                    writer.writerow([])
+                
+                if analytics_data.get("irrigation_distribution"):
+                    writer.writerow(["Irrigation Distribution"])
+                    writer.writerow(["Method", "Count"])
+                    for item in analytics_data["irrigation_distribution"]:
+                        writer.writerow([item.get("name", "-"), item.get("value", 0)])
+                    writer.writerow([])
+                
+                if analytics_data.get("lifecycle_completion"):
+                    writer.writerow(["Lifecycle Completion"])
+                    writer.writerow(["Status", "Count"])
+                    for item in analytics_data["lifecycle_completion"]:
+                        writer.writerow([item.get("name", "-"), item.get("value", 0)])
+                    writer.writerow([])
+            except Exception:
+                pass
+        
+        writer.writerow([])
+        writer.writerow(["Report generated by OELP Agricultural Platform"])
+        writer.writerow([f"For support, visit: https://oelp.com/support"])
+        
         buffer.seek(0)
-        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = "attachment; filename=report.pdf"
+        response = HttpResponse(buffer.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="oelp_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
         return response
 
 
@@ -1966,9 +2147,12 @@ class ExportPDFView(APIView):
         if resolved_user is None:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         
-        # Minimal PDF export (same as earlier behavior). If reportlab is missing, return 501.
+        # If reportlab is missing, return 501.
         try:
             from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib.units import inch
+            from reportlab.lib import colors
         except Exception:
             return Response({"detail": "PDF export not available (reportlab missing)"}, status=status.HTTP_501_NOT_IMPLEMENTED)
 
@@ -1976,6 +2160,7 @@ class ExportPDFView(APIView):
         start_date_str = request.query_params.get("start_date")
         end_date_str = request.query_params.get("end_date")
         field_id = request.query_params.get("field_id") or request.query_params.get("field")
+        analytics_params = request.query_params.getlist("analytics")
         start_date = None
         end_date = None
         try:
@@ -1987,11 +2172,34 @@ class ExportPDFView(APIView):
             pass
 
         buffer = io.BytesIO()
-        p = canvas.Canvas(buffer)
-        p.drawString(100, 800, "OELP Report")
-        y = 760
+        p = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
         
-        queryset = Field.objects.filter(user=resolved_user)
+        # Header
+        p.setFont("Helvetica-Bold", 20)
+        p.setFillColor(colors.HexColor("#1a5f3f"))
+        p.drawString(50, height - 50, "OELP Agricultural Platform")
+        p.setFont("Helvetica", 14)
+        p.setFillColor(colors.black)
+        p.drawString(50, height - 75, "Comprehensive Agricultural Report")
+        
+        # User info
+        y = height - 110
+        p.setFont("Helvetica", 10)
+        p.drawString(50, y, f"Generated for: {resolved_user.full_name or resolved_user.username}")
+        y -= 15
+        p.drawString(50, y, f"Email: {resolved_user.email}")
+        y -= 15
+        p.drawString(50, y, f"Generated on: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}")
+        y -= 15
+        if start_date or end_date:
+            p.drawString(50, y, f"Date Range: {start_date.strftime('%Y-%m-%d') if start_date else 'All'} to {end_date.strftime('%Y-%m-%d') if end_date else 'All'}")
+            y -= 20
+        else:
+            y -= 10
+        
+        # Fields section
+        queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
         if field_id:
             queryset = queryset.filter(pk=field_id)
         if start_date:
@@ -1999,18 +2207,191 @@ class ExportPDFView(APIView):
         if end_date:
             queryset = queryset.filter(updated_at__date__lte=end_date)
         
-        for fld in queryset[:30]:
-            p.drawString(100, y, f"Field: {fld.name}")
+        fields_list = list(queryset)
+        
+        if fields_list:
+            y -= 10
+            p.setFont("Helvetica-Bold", 14)
+            p.setFillColor(colors.HexColor("#1a5f3f"))
+            p.drawString(50, y, "FIELD DETAILS")
             y -= 20
-            if y < 50:
+            
+            p.setFont("Helvetica-Bold", 9)
+            p.setFillColor(colors.HexColor("#2d5a3d"))
+            p.drawString(50, y, "Field Name")
+            p.drawString(200, y, "Crop")
+            p.drawString(300, y, "Location")
+            p.drawString(400, y, "Area (Acres)")
+            p.drawString(500, y, "Status")
+            y -= 15
+            p.setStrokeColor(colors.grey)
+            p.line(50, y, 550, y)
+            y -= 10
+            
+            p.setFont("Helvetica", 9)
+            p.setFillColor(colors.black)
+            for fld in fields_list[:25]:  # Limit to 25 per page
+                if y < 100:
+                    p.showPage()
+                    y = height - 50
+                    p.setFont("Helvetica-Bold", 9)
+                    p.setFillColor(colors.HexColor("#2d5a3d"))
+                    p.drawString(50, y, "Field Name")
+                    p.drawString(200, y, "Crop")
+                    p.drawString(300, y, "Location")
+                    p.drawString(400, y, "Area (Acres)")
+                    p.drawString(500, y, "Status")
+                    y -= 15
+                    p.line(50, y, 550, y)
+                    y -= 10
+                    p.setFont("Helvetica", 9)
+                
+                p.drawString(50, y, (fld.name or "-")[:30])
+                p.drawString(200, y, (fld.crop.name if fld.crop else "-")[:20])
+                p.drawString(300, y, (fld.location_name or "-")[:20])
+                p.drawString(400, y, f"{fld.area:.2f}" if fld.area else "-")
+                p.drawString(500, y, "Active" if fld.is_active else "Inactive")
+                y -= 15
+            
+            y -= 10
+        
+        # Soil Reports section
+        soil_queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
+        if field_id:
+            soil_queryset = soil_queryset.filter(field_id=field_id)
+        if start_date:
+            soil_queryset = soil_queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            soil_queryset = soil_queryset.filter(created_at__date__lte=end_date)
+        
+        soil_reports = list(soil_queryset[:20])
+        if soil_reports:
+            if y < 150:
                 p.showPage()
-                y = 800
+                y = height - 50
+            
+            p.setFont("Helvetica-Bold", 14)
+            p.setFillColor(colors.HexColor("#1a5f3f"))
+            p.drawString(50, y, "SOIL ANALYSIS REPORTS")
+            y -= 20
+            
+            p.setFont("Helvetica-Bold", 9)
+            p.setFillColor(colors.HexColor("#2d5a3d"))
+            p.drawString(50, y, "Field")
+            p.drawString(150, y, "pH")
+            p.drawString(200, y, "EC")
+            p.drawString(250, y, "N")
+            p.drawString(300, y, "P")
+            p.drawString(350, y, "K")
+            p.drawString(400, y, "Soil Type")
+            y -= 15
+            p.line(50, y, 550, y)
+            y -= 10
+            
+            p.setFont("Helvetica", 9)
+            p.setFillColor(colors.black)
+            for report in soil_reports:
+                if y < 100:
+                    p.showPage()
+                    y = height - 50
+                    p.setFont("Helvetica-Bold", 9)
+                    p.setFillColor(colors.HexColor("#2d5a3d"))
+                    p.drawString(50, y, "Field")
+                    p.drawString(150, y, "pH")
+                    p.drawString(200, y, "EC")
+                    p.drawString(250, y, "N")
+                    p.drawString(300, y, "P")
+                    p.drawString(350, y, "K")
+                    p.drawString(400, y, "Soil Type")
+                    y -= 15
+                    p.line(50, y, 550, y)
+                    y -= 10
+                    p.setFont("Helvetica", 9)
+                
+                field_name = (report.field.name if report.field else "-")[:25]
+                p.drawString(50, y, field_name)
+                p.drawString(150, y, f"{report.ph:.2f}" if report.ph else "-")
+                p.drawString(200, y, f"{report.ec:.2f}" if report.ec else "-")
+                p.drawString(250, y, f"{report.nitrogen:.2f}" if report.nitrogen else "-")
+                p.drawString(300, y, f"{report.phosphorous:.2f}" if report.phosphorous else "-")
+                p.drawString(350, y, f"{report.potassium:.2f}" if report.potassium else "-")
+                p.drawString(400, y, (report.soil_type.name if report.soil_type else "-")[:15])
+                y -= 15
+            
+            y -= 10
+        
+        # Analytics section if requested
+        if analytics_params:
+            from .views import AnalyticsSummaryView
+            analytics_view = AnalyticsSummaryView()
+            analytics_view.request = request
+            analytics_view.request.user = resolved_user
+            try:
+                analytics_data = analytics_view.get(request).data
+                
+                if y < 200:
+                    p.showPage()
+                    y = height - 50
+                
+                p.setFont("Helvetica-Bold", 14)
+                p.setFillColor(colors.HexColor("#1a5f3f"))
+                p.drawString(50, y, "ANALYTICS SUMMARY")
+                y -= 25
+                
+                if analytics_data.get("crop_distribution"):
+                    p.setFont("Helvetica-Bold", 11)
+                    p.setFillColor(colors.HexColor("#2d5a3d"))
+                    p.drawString(50, y, "Crop Distribution")
+                    y -= 15
+                    p.setFont("Helvetica", 9)
+                    p.setFillColor(colors.black)
+                    for item in analytics_data["crop_distribution"][:10]:
+                        p.drawString(70, y, f"{item.get('name', '-')}: {item.get('value', 0)} fields")
+                        y -= 12
+                    y -= 5
+                
+                if analytics_data.get("irrigation_distribution"):
+                    if y < 100:
+                        p.showPage()
+                        y = height - 50
+                    p.setFont("Helvetica-Bold", 11)
+                    p.setFillColor(colors.HexColor("#2d5a3d"))
+                    p.drawString(50, y, "Irrigation Distribution")
+                    y -= 15
+                    p.setFont("Helvetica", 9)
+                    p.setFillColor(colors.black)
+                    for item in analytics_data["irrigation_distribution"][:10]:
+                        p.drawString(70, y, f"{item.get('name', '-')}: {item.get('value', 0)} fields")
+                        y -= 12
+                    y -= 5
+                
+                if analytics_data.get("lifecycle_completion_percent") is not None:
+                    if y < 80:
+                        p.showPage()
+                        y = height - 50
+                    p.setFont("Helvetica-Bold", 11)
+                    p.setFillColor(colors.HexColor("#2d5a3d"))
+                    p.drawString(50, y, f"Lifecycle Completion: {analytics_data.get('lifecycle_completion_percent', 0)}%")
+                    y -= 15
+            except Exception:
+                pass
+        
+        # Footer
+        if y < 80:
+            p.showPage()
+            y = height - 50
+        
+        p.setFont("Helvetica", 8)
+        p.setFillColor(colors.grey)
+        p.drawString(50, y, "Report generated by OELP Agricultural Platform")
+        y -= 10
+        p.drawString(50, y, "For support, visit: https://oelp.com/support")
         
         p.showPage()
         p.save()
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
-        response["Content-Disposition"] = "attachment; filename=report.pdf"
+        response["Content-Disposition"] = f'attachment; filename="oelp_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
         return response
 
 def get_user_subscription_features(user):

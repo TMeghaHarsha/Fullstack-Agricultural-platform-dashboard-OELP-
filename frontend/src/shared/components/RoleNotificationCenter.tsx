@@ -109,6 +109,8 @@ export default function RoleNotificationCenter({ title, description }: Props) {
       headers,
     });
     fetchNotifications();
+    // Dispatch custom event to update unread counts in other components
+    window.dispatchEvent(new CustomEvent('notificationRead'));
   };
 
   const markRead = async (id: number) => {
@@ -118,6 +120,8 @@ export default function RoleNotificationCenter({ title, description }: Props) {
       headers,
     });
     fetchNotifications();
+    // Dispatch custom event to update unread counts in other components
+    window.dispatchEvent(new CustomEvent('notificationRead'));
   };
 
   const handleSend = async () => {

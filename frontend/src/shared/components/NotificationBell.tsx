@@ -85,6 +85,8 @@ export function NotificationBell() {
         headers: { Authorization: `Token ${token}` },
       });
       loadPreview();
+      // Dispatch custom event to update unread counts in other components
+      window.dispatchEvent(new CustomEvent('notificationRead'));
     },
     [loadPreview]
   );
@@ -97,6 +99,8 @@ export function NotificationBell() {
       headers: { Authorization: `Token ${token}` },
     });
     loadPreview();
+    // Dispatch custom event to update unread counts in other components
+    window.dispatchEvent(new CustomEvent('notificationRead'));
   }, [loadPreview]);
 
   useEffect(() => {

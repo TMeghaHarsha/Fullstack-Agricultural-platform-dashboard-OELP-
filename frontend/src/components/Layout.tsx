@@ -53,6 +53,8 @@ export function Layout({ children }: LayoutProps) {
     description: "",
   });
   const [me, setMe] = useState<{ full_name?: string; email?: string; roles?: string[] } | null>(null);
+  const [userPlan, setUserPlan] = useState<any | null>(null);
+  const [isEnterprise, setIsEnterprise] = useState(false);
 
   const API_URL =
     (import.meta as any).env.VITE_API_URL ||
@@ -65,6 +67,17 @@ export function Layout({ children }: LayoutProps) {
     fetch(`${API_URL}/auth/me/`, { headers: { Authorization: `Token ${token}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setMe(d))
+      .catch(() => {});
+    
+    // Check user's subscription plan
+    fetch(`${API_URL}/subscriptions/user/`, { headers: { Authorization: `Token ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const plan = Array.isArray(d?.results) ? d.results[0] : d;
+        setUserPlan(plan);
+        const planName = (plan?.plan_name || "").toLowerCase();
+        setIsEnterprise(planName === "enterpriseplan" || planName === "enterprise");
+      })
       .catch(() => {});
   }, [API_URL]);
 
@@ -243,11 +256,47 @@ export function Layout({ children }: LayoutProps) {
       <Dialog open={showSupportDialog} onOpenChange={setShowSupportDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Contact Support</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Contact Support
+              {isEnterprise && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-gradient-to-r from-yellow-400 to-orange-500 px-2.5 py-1 text-xs font-semibold text-white shadow-sm">
+                  ⭐ Priority Support
+                </span>
+              )}
+            </DialogTitle>
             <DialogDescription>
-              Tell us about the issue you're facing and we'll help you resolve it.
+              {isEnterprise ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-primary">You have Enterprise Plan with Priority Support!</p>
+                  <ul className="list-disc list-inside text-sm space-y-1 text-muted-foreground">
+                    <li>Faster response times (typically within 1-2 hours)</li>
+                    <li>Dedicated support team member</li>
+                    <li>Priority ticket handling</li>
+                    <li>Extended support hours</li>
+                  </ul>
+                </div>
+              ) : (
+                "Tell us about the issue you're facing and we'll help you resolve it."
+              )}
             </DialogDescription>
           </DialogHeader>
+          {isEnterprise && (
+            <div className="rounded-lg bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-yellow-900">Priority Support Active</h4>
+                  <p className="mt-1 text-sm text-yellow-800">
+                    Your Enterprise plan includes priority support. Your ticket will be handled with high priority and you'll receive faster responses.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="space-y-4 mt-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">

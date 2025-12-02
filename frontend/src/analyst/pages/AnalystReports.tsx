@@ -19,9 +19,21 @@ export default function AnalystReports() {
     const token = localStorage.getItem("token");
     if (!token) return;
     setLoading(true);
-    fetch(`${API_URL}/soil-reports/`, { headers: { Authorization: `Token ${token}` } })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setReports(Array.isArray(d?.results) ? d.results : (Array.isArray(d) ? d : [])))
+    // Analyst has access to all soil reports via admin endpoint
+    Promise.all([
+      fetch(`${API_URL}/soil-reports/`, { headers: { Authorization: `Token ${token}` } }),
+      fetch(`${API_URL}/admin/soil-reports/`, { headers: { Authorization: `Token ${token}` } }).catch(() => null)
+    ])
+      .then(([res1, res2]) => {
+        if (res2 && res2.ok) {
+          return res2.json();
+        }
+        return res1.ok ? res1.json() : null;
+      })
+      .then(d => {
+        const arr = Array.isArray(d?.results) ? d.results : (Array.isArray(d) ? d : []);
+        setReports(arr);
+      })
       .catch(() => setReports([]))
       .finally(() => setLoading(false));
   }, []);
@@ -43,7 +55,7 @@ export default function AnalystReports() {
   const lifecycleData = useMemo(() => (analytics?.lifecycle_completion || []).map((x:any, i:number) => ({ name: x.name || `Item ${i+1}`, value: Number(x.value) || 0 })), [analytics]);
   const cropDist = useMemo(() => (analytics?.crop_distribution || []).map((x:any, i:number) => ({ name: x.name || `Crop ${i+1}`, value: Number(x.value) || 0 })), [analytics]);
 
-  const exportCSV = () => {
+  const exportReport = (type: "csv" | "pdf" = "pdf") => {
     const token = localStorage.getItem("token");
     if (!token) return;
     
@@ -56,7 +68,7 @@ export default function AnalystReports() {
     params.set("token", token);
     
     // Open export URL in new window
-    const url = `${API_URL}/reports/export/csv/?${params.toString()}`;
+    const url = `${API_URL}/reports/export/${type}/?${params.toString()}`;
     window.open(url, "_blank");
   };
 
@@ -68,8 +80,11 @@ export default function AnalystReports() {
           <p className="text-muted-foreground">Generate insights and explore analytics</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportCSV}>
+          <Button variant="outline" onClick={() => exportReport("pdf")}>
             <Download className="mr-2 h-4 w-4" /> Export PDF Report
+          </Button>
+          <Button variant="outline" onClick={() => exportReport("csv")}>
+            <Download className="mr-2 h-4 w-4" /> Export CSV Report
           </Button>
         </div>
       </div>
@@ -114,35 +129,52 @@ export default function AnalystReports() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Reports</CardTitle>
-          <CardDescription>Latest soil reports</CardDescription>
+          <CardDescription>Latest soil reports ({reports.length} total)</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Field</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>pH</TableHead>
-                  <TableHead>EC</TableHead>
-                  <TableHead>Soil Type</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reports.slice(0, 10).map((r:any) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.id}</TableCell>
-                    <TableCell>{r.field_name || r.field || (typeof r.field === 'object' ? r.field?.name : '-') || '-'}</TableCell>
-                    <TableCell>{r.sampled_at ? new Date(r.sampled_at).toLocaleDateString() : (r.created_at ? new Date(r.created_at).toLocaleDateString() : '-')}</TableCell>
-                    <TableCell>{r.ph != null ? r.ph.toFixed(2) : '-'}</TableCell>
-                    <TableCell>{r.ec != null ? r.ec.toFixed(2) : '-'}</TableCell>
-                    <TableCell>{r.soil_type_name || r.soil_type || (typeof r.soil_type === 'object' ? r.soil_type?.name : '-') || '-'}</TableCell>
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading reports...</div>
+          ) : reports.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">No soil reports available yet. Reports will appear here once they are generated.</div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Field</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>pH</TableHead>
+                    <TableHead>EC</TableHead>
+                    <TableHead>Soil Type</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {reports.slice(0, 10).map((r:any) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.id}</TableCell>
+                      <TableCell>{r.field_name || (typeof r.field === 'object' ? r.field?.name : String(r.field || '-')) || '-'}</TableCell>
+                      <TableCell>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell>{r.ph != null ? r.ph.toFixed(2) : '-'}</TableCell>
+                      <TableCell>{r.ec != null ? r.ec.toFixed(2) : '-'}</TableCell>
+                      <TableCell>{r.soil_type_name || (typeof r.soil_type === 'object' ? r.soil_type?.name : String(r.soil_type || '-')) || '-'}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          const token = localStorage.getItem("token");
+                          const fieldId = typeof r.field === 'object' ? r.field?.id : r.field;
+                          const url = `${API_URL}/reports/export/pdf/?field_id=${fieldId}${token ? `&token=${token}` : ''}`;
+                          window.open(url, "_blank");
+                        }}>
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
