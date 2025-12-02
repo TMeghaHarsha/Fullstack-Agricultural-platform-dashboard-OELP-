@@ -2011,6 +2011,10 @@ class ExportCSVView(APIView):
     permission_classes: list = []
 
     def get(self, request):
+        # Ensure Field and SoilReport are available in this scope (explicit import to avoid UnboundLocalError)
+        from apps.models_app.field import Field
+        from apps.models_app.soil_report import SoilReport
+        
         # Resolve user from Authorization header (Token ...) or token query param
         resolved_user: CustomUser | None = None
         try:
@@ -2193,6 +2197,10 @@ class ExportPDFView(APIView):
     permission_classes: list = []
 
     def get(self, request):
+        # Ensure Field and SoilReport are available in this scope (explicit import to avoid UnboundLocalError)
+        from apps.models_app.field import Field
+        from apps.models_app.soil_report import SoilReport
+        
         # Resolve user from Authorization header (Token ...) or token query param
         resolved_user: CustomUser | None = None
         try:
