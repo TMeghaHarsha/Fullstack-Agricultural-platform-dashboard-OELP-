@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -324,6 +324,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Payment Method</DialogTitle>
+            <DialogDescription>
+              Add a new payment method to your account
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -356,6 +359,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{showPlanDialog.plan?.name || 'Choose a Plan'}</DialogTitle>
+            <DialogDescription>
+              {showPlanDialog.plan ? `Subscribe to ${showPlanDialog.plan.name} plan` : "Select a subscription plan that fits your needs"}
+            </DialogDescription>
           </DialogHeader>
           {!showPlanDialog.plan && (
             <div className="space-y-3">
@@ -475,6 +481,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Select a saved card</DialogTitle>
+            <DialogDescription>
+              Choose a payment method to complete your subscription
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             {paymentMethods.map((pm) => (
@@ -571,6 +580,9 @@ const Subscriptions = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Card details</DialogTitle>
+            <DialogDescription>
+              View details of your saved payment method
+            </DialogDescription>
           </DialogHeader>
           {showPmDetails.pm && (
             <div className="space-y-2">
@@ -590,6 +602,9 @@ const Subscriptions = () => {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Why are you downgrading?</DialogTitle>
+            <DialogDescription>
+              Help us understand why you're downgrading. Your feedback helps us improve.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">

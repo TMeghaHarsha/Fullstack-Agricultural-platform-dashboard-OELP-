@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
@@ -441,6 +441,9 @@ const Fields = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Generate Soil Report</DialogTitle>
+            <DialogDescription>
+              Enter soil analysis data for the selected field. All fields are required.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">

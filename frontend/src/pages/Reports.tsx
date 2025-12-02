@@ -483,7 +483,7 @@ const Reports = () => {
                     <TableRow key={r.id}>
                       <TableCell>{r.id}</TableCell>
                       <TableCell>{r.field_name || (typeof r.field === 'object' ? r.field?.name : String(r.field || '-')) || '-'}</TableCell>
-                      <TableCell>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell>{r.id || '-'}</TableCell>
                       <TableCell>{r.ph != null ? r.ph.toFixed(2) : '-'}</TableCell>
                       <TableCell>{r.ec != null ? r.ec.toFixed(2) : '-'}</TableCell>
                       <TableCell>{r.soil_type_name || (typeof r.soil_type === 'object' ? r.soil_type?.name : String(r.soil_type || '-')) || '-'}</TableCell>

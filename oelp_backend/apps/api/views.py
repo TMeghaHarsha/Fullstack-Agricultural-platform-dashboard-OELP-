@@ -1031,18 +1031,36 @@ class SoilReportViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Ensure the field belongs to the user"""
-        field_id = serializer.validated_data.get("field")
-        if field_id and field_id.user != self.request.user:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied("You can only create soil reports for your own fields.")
+        from apps.models_app.field import Field
+        from rest_framework.exceptions import PermissionDenied, NotFound
         
-        report = serializer.save()
-        # Set a convenient report link to the PDF export filtered by field
+        field = serializer.validated_data.get("field")
+        # Field can be either an ID (int) or a Field object
+        if isinstance(field, int):
+            try:
+                field_obj = Field.objects.select_related("user").get(pk=field)
+            except Field.DoesNotExist:
+                raise NotFound("Field not found.")
+            field = field_obj
+        
+        # Check if field belongs to user
+        if field and hasattr(field, 'user'):
+            if field.user != self.request.user:
+                raise PermissionDenied("You can only create soil reports for your own fields.")
+        
         try:
-            report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
-            report.save(update_fields=["report_link"])
-        except Exception:
-            pass
+            report = serializer.save()
+            # Set a convenient report link to the PDF export filtered by field
+            try:
+                report.report_link = f"/api/reports/export/pdf/?field_id={report.field_id}"
+                report.save(update_fields=["report_link"])
+            except Exception:
+                pass
+        except Exception as e:
+            # Log the error for debugging
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 class SoilTextureViewSet(viewsets.ModelViewSet):
@@ -2040,13 +2058,22 @@ class ExportCSVView(APIView):
         writer.writerow([])
         
         # Fields data
-        queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
-        if field_id:
-            queryset = queryset.filter(pk=field_id)
-        if start_date:
-            queryset = queryset.filter(updated_at__date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(updated_at__date__lte=end_date)
+        try:
+            queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
+            if field_id:
+                try:
+                    field_id_int = int(field_id)
+                    queryset = queryset.filter(pk=field_id_int)
+                except (ValueError, TypeError):
+                    pass
+            if start_date:
+                queryset = queryset.filter(updated_at__date__gte=start_date)
+            if end_date:
+                queryset = queryset.filter(updated_at__date__lte=end_date)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            queryset = Field.objects.none()
         
         writer.writerow(["FIELD DETAILS"])
         writer.writerow(["Field Name", "Farm", "Crop", "Crop Variety", "Location", "Area (Acres)", "Soil Type", "Irrigation Method", "Status", "Created Date"])
@@ -2077,17 +2104,24 @@ class ExportCSVView(APIView):
         writer.writerow([])
         
         # Soil Reports section
-        soil_queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
-        if field_id:
-            soil_queryset = soil_queryset.filter(field_id=field_id)
-        if start_date:
-            soil_queryset = soil_queryset.filter(created_at__date__gte=start_date)
-        if end_date:
-            soil_queryset = soil_queryset.filter(created_at__date__lte=end_date)
+        try:
+            soil_queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
+            if field_id:
+                try:
+                    field_id_int = int(field_id)
+                    soil_queryset = soil_queryset.filter(field_id=field_id_int)
+                except (ValueError, TypeError):
+                    pass
+            # Note: SoilReport model doesn't have created_at field, so we can't filter by date
+            # If date filtering is needed, we would need to add a timestamp field to the model
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            soil_queryset = SoilReport.objects.none()
         
         if soil_queryset.exists():
             writer.writerow(["SOIL ANALYSIS REPORTS"])
-            writer.writerow(["Field", "pH", "EC", "Nitrogen", "Phosphorous", "Potassium", "Soil Type", "Report Date"])
+            writer.writerow(["Field", "pH", "EC", "Nitrogen", "Phosphorous", "Potassium", "Soil Type", "Report ID"])
             for report in soil_queryset[:50]:
                 writer.writerow([
                     report.field.name if report.field else "-",
@@ -2097,7 +2131,7 @@ class ExportCSVView(APIView):
                     f"{report.phosphorous:.2f}" if report.phosphorous else "-",
                     f"{report.potassium:.2f}" if report.potassium else "-",
                     report.soil_type.name if report.soil_type else "-",
-                    report.created_at.strftime("%Y-%m-%d") if report.created_at else "-"
+                    str(report.id) if report.id else "-"
                 ])
             writer.writerow([])
         
@@ -2228,13 +2262,22 @@ class ExportPDFView(APIView):
             y -= 10
         
         # Fields section
-        queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
-        if field_id:
-            queryset = queryset.filter(pk=field_id)
-        if start_date:
-            queryset = queryset.filter(updated_at__date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(updated_at__date__lte=end_date)
+        try:
+            queryset = Field.objects.filter(user=resolved_user).select_related("crop", "soil_type", "farm")
+            if field_id:
+                try:
+                    field_id_int = int(field_id)
+                    queryset = queryset.filter(pk=field_id_int)
+                except (ValueError, TypeError):
+                    pass
+            if start_date:
+                queryset = queryset.filter(updated_at__date__gte=start_date)
+            if end_date:
+                queryset = queryset.filter(updated_at__date__lte=end_date)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            queryset = Field.objects.none()
         
         fields_list = list(queryset)
         
@@ -2285,15 +2328,22 @@ class ExportPDFView(APIView):
             y -= 10
         
         # Soil Reports section
-        soil_queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
-        if field_id:
-            soil_queryset = soil_queryset.filter(field_id=field_id)
-        if start_date:
-            soil_queryset = soil_queryset.filter(created_at__date__gte=start_date)
-        if end_date:
-            soil_queryset = soil_queryset.filter(created_at__date__lte=end_date)
-        
-        soil_reports = list(soil_queryset[:20])
+        try:
+            soil_queryset = SoilReport.objects.filter(field__user=resolved_user).select_related("field", "soil_type")
+            if field_id:
+                try:
+                    field_id_int = int(field_id)
+                    soil_queryset = soil_queryset.filter(field_id=field_id_int)
+                except (ValueError, TypeError):
+                    pass
+            # Note: SoilReport model doesn't have created_at field, so we can't filter by date
+            # If date filtering is needed, we would need to add a timestamp field to the model
+            
+            soil_reports = list(soil_queryset[:50])  # Limit to prevent memory issues
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            soil_reports = []
         if soil_reports:
             if y < 150:
                 p.showPage()
@@ -2319,7 +2369,7 @@ class ExportPDFView(APIView):
             
             p.setFont("Helvetica", 9)
             p.setFillColor(colors.black)
-            for report in soil_reports:
+            for report in soil_reports[:50]:  # Limit to prevent memory issues
                 if y < 100:
                     p.showPage()
                     y = height - 50
