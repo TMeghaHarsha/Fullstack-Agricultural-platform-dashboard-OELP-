@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Download, FileDown, TrendingUp, Search } from "lucide-react";
@@ -195,15 +195,14 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold">Reports & Analytics</h1>
-          <p className="text-sm sm:text-base text-muted-foreground">Comprehensive insights into your farming operations</p>
+          <h1 className="text-3xl font-bold">Reports & Analytics</h1>
+          <p className="text-muted-foreground">Comprehensive insights into your farming operations</p>
         </div>
-        <div className="flex gap-2 items-center w-full sm:w-auto">
+        <div className="flex gap-2 items-center">
           <Button
             onClick={() => { setExportType('pdf'); setOpenExport(true); }}
-            className="w-full sm:w-auto"
           >
             <FileDown className="mr-2 h-4 w-4" />
             Export PDF
@@ -211,7 +210,7 @@ const Reports = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -309,7 +308,7 @@ const Reports = () => {
 
           {/* Additional advanced analytics */}
           {fieldsData.length > 0 && (
-            <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader><CardTitle>Field Size Distribution</CardTitle></CardHeader>
                 <CardContent>
@@ -376,7 +375,7 @@ const Reports = () => {
           <CardDescription>Apply filters and view filtered analytics</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-4">
             <div>
               <label className="text-xs text-muted-foreground">Crop</label>
               <Input placeholder="e.g., Wheat" value={filters.crop || ""} onChange={(e)=> setFilters({...filters, crop: e.target.value })} />
@@ -404,7 +403,7 @@ const Reports = () => {
 
       {/* Filtered Analytics Display */}
       {filteredAnalytics && (
-        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {filteredAnalytics.crop_distribution && filteredAnalytics.crop_distribution.length > 0 ? (
             <Card>
               <CardHeader><CardTitle>Filtered Crop Distribution</CardTitle></CardHeader>
@@ -466,7 +465,7 @@ const Reports = () => {
           {soilReports.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">No soil reports available yet. Generate soil reports from the Fields page.</div>
           ) : (
-            <div className="rounded-md border overflow-x-auto">
+            <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -511,9 +510,6 @@ const Reports = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{exportType === 'csv' ? 'Download CSV' : 'Export PDF'}</DialogTitle>
-            <DialogDescription>
-              Select analytics to include and date range for your report
-            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">

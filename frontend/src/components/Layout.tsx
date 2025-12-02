@@ -124,7 +124,7 @@ export function Layout({ children }: LayoutProps) {
       <div className="min-h-screen flex w-full">
         <AppSidebar />
         <div className="flex-1 flex flex-col">
-          <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-3 sm:px-6">
+          <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-card px-6">
             <SidebarTrigger className="text-primary" />
             <div className="flex items-center gap-4">
               <NotificationBell />
@@ -169,7 +169,7 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </header>
           
-          <main className="flex-1 p-3 sm:p-6 bg-background">
+          <main className="flex-1 p-6 bg-background">
             {children}
           </main>
         </div>
